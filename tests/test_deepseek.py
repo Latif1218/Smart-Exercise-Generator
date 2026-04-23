@@ -1,5 +1,5 @@
 from openai import OpenAI, chat
-DEEPSEEK_API_KEY="Ssk-fa5901e19ca04a7485740a2aa59ac190"
+DEEPSEEK_API_KEY="sk-7b05c0ae5d654e97a389e0acb50a499b"
 DEEPSEEK_BASE_URL="https://api.deepseek.com"
 DEEPSEEK_MODEL="deepseek-chat"
 client = OpenAI(
@@ -12,7 +12,7 @@ response = client.chat.completions.create(
     messages=[
         {
             "role": "user",
-            "content": "What is the capital of Bangladesh?"
+            "content": "Tell me about something SDG?"
         }
     ]
 )

@@ -40,15 +40,13 @@ def _validate_image_content_type(file: UploadFile) -> None:
     description="""
     Upload a single image and extract text from it.
     
-    In Figma, this corresponds to the 'Single image flow' — when a user selects Single and captures an image from the home screen, this endpoint is called.
-    
     Returns:
     - Extracted text from the image
     - Cleaned and formatted text ready for exercise generation
     """
 )
 async def ocr_single_image(
-    image: UploadFile = File(..., description="Image containing text — e.g., textbook page, notes")
+    image: UploadFile = File(..., description="Image containing text, textbook page, notes")
 ) -> OCRResponse:
     """Extract text from a single image using OCR"""
 
@@ -86,8 +84,6 @@ async def ocr_single_image(
     description="""
     Upload multiple images and extract text from all of them, then merge the results.
     
-    In Figma, this corresponds to the 'Multiple image flow' — when a user selects Multiple and captures several pages, this endpoint is called.
-    
     Features:
     - Up to 20 images can be processed at once
     - Each page is tracked individually
@@ -95,7 +91,7 @@ async def ocr_single_image(
     """
 )
 async def ocr_multiple_images(
-    images: List[UploadFile] = File(..., description="Multiple textbook pages — maximum 20 files")
+    images: List[UploadFile] = File(..., description="Multiple textbook pages, maximum 20 files")
 ) -> OCRResponse:
     """Extract and merge text from multiple images using OCR"""
 
