@@ -1,9 +1,9 @@
 from openai import OpenAI, chat
-DEEPSEEK_API_KEY="sk-7b05c0ae5d654e97a389e0acb50a499b"
+# DEEPSEEK_API_KEY="sk-7fsdgjfgfhgdhrgg0ae5d654e9"
 DEEPSEEK_BASE_URL="https://api.deepseek.com"
 DEEPSEEK_MODEL="deepseek-chat"
 client = OpenAI(
-    api_key=DEEPSEEK_API_KEY,
+    # api_key=DEEPSEEK_API_KEY,
     base_url=DEEPSEEK_BASE_URL
 )
 

@@ -48,8 +48,14 @@ async def root():
     }
 
 
+
+# ==========================================================================
 app.include_router(ocr.router, prefix="/api/v1")
 app.include_router(exercise.router, prefix="/api/v1")
+# ==========================================================================
+
+
+
 
 @app.get("/health", tags=["Health"])
 async def health_check():

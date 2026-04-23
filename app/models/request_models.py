@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import List
 from enum import Enum
 
@@ -41,3 +41,9 @@ class GenerateExerciseRequest(BaseModel):
         ge=1,
         le=50
     )
+
+
+class HelpContactRequest(BaseModel):
+    email: EmailStr
+    subject: str = Field(..., min_length=3, max_length=200)
+    message: str = Field(..., min_length=5, max_length=5000)
