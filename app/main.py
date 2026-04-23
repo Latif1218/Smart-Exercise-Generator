@@ -2,7 +2,7 @@ from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.routers import exercise, ocr
+from app.routers import exercise, ocr, help
 
 
 app = FastAPI(
@@ -52,6 +52,8 @@ async def root():
 # ==========================================================================
 app.include_router(ocr.router, prefix="/api/v1")
 app.include_router(exercise.router, prefix="/api/v1")
+app.include_router(help.router,  prefix="/api/v1)")
+
 # ==========================================================================
 
 
