@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -58,7 +58,7 @@ async def health_check():
         "status": "healthy",
         "services": {
             "ocr": "available",
-            "llm": "available (requires API key)"
+            "llm": "available"
         }
     }
 
@@ -67,7 +67,7 @@ async def health_check():
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     return JSONResponse(
-        status_code=500,
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "success": False,
             "error": "Internal server error",
