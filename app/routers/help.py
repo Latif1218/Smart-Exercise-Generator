@@ -24,6 +24,11 @@ def submit_help_contact(payload: HelpContactRequest) -> HelpContactResponse:
         return HelpContactResponse(
             success=True,
             message="Your message has been sent successfully.",
+            data={
+                "email": payload.email,
+                "subject": payload.subject,
+                "message": payload.message
+            }
         )
     except Exception as exc:
         raise HTTPException(

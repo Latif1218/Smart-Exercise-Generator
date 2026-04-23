@@ -52,7 +52,7 @@ async def root():
 # ==========================================================================
 app.include_router(ocr.router, prefix="/api/v1")
 app.include_router(exercise.router, prefix="/api/v1")
-app.include_router(help.router,  prefix="/api/v1)")
+app.include_router(help.router,  prefix="/api/v1")
 
 # ==========================================================================
 
