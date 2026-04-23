@@ -1,13 +1,14 @@
-from openai import OpenAI
-from app.config import settings
-
+from openai import OpenAI, chat
+DEEPSEEK_API_KEY="Ssk-fa5901e19ca04a7485740a2aa59ac190"
+DEEPSEEK_BASE_URL="https://api.deepseek.com"
+DEEPSEEK_MODEL="deepseek-chat"
 client = OpenAI(
-    api_key=settings.deepseek_api_key,
-    base_url=settings.deepseek_base_url
+    api_key=DEEPSEEK_API_KEY,
+    base_url=DEEPSEEK_BASE_URL
 )
 
 response = client.chat.completions.create(
-    model=settings.deepseek_model,
+    model=DEEPSEEK_MODEL,
     messages=[
         {
             "role": "user",
