@@ -33,6 +33,11 @@ class Settings(BaseSettings):
         env="MAX_FILE_SIZE_MB"
     )
 
+    openai_api_key: str = Field(
+        default=None, 
+        env="OPENAI_API_KEY"
+    )
+
     app_name: str = Field(default="OCR Question Generator API", env="APP_NAME")
     app_env: str = Field(default="development", env="APP_ENV")
     app_host: str = Field(default="0.0.0.0", env="APP_HOST")
