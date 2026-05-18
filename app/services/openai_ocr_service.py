@@ -1,5 +1,5 @@
 import base64
-from openai import OpenAI
+from openai import OpenAI, AzureOpenAI
 from typing import List
 
 from app.config import settings
@@ -7,13 +7,31 @@ from app.models.response_models import ExtractedPage, OCRResponse
 
 
 class OpenAIOCRService:
-    def __init__(self):
-        self.api_key = getattr(settings, 'openai_api_key', None)
-        if not self.api_key:
-            raise ValueError("OPENAI_API_KEY is not set in .env file!")
+    # def __init__(self):
+    #     self.api_key = getattr(settings, 'openai_api_key', None)
+    #     if not self.api_key:
+    #         raise ValueError("OPENAI_API_KEY is not set in .env file!")
 
-        self.client = OpenAI(api_key=self.api_key)
-        self.model = "gpt-4o"         
+    #     self.client = OpenAI(api_key=self.api_key)
+    #     self.model = "gpt-4o"         
+
+    def __init__(self):
+        self.api_key = getattr(settings, 'azure_openai_api_key', None)
+        self.endpoint = getattr(settings, 'azure_openai_endpoint', None)
+        self.deployment = getattr(settings, 'azure_openai_deployment', 'gpt-4o')
+        self.api_version = getattr(settings, 'azure_openai_api_version', '2024-02-01')
+
+        if not self.api_key:
+            raise ValueError("AZURE_OPENAI_API_KEY is not set in .env file!")
+        if not self.endpoint:
+            raise ValueError("AZURE_OPENAI_ENDPOINT is not set in .env file!")
+
+        self.client = AzureOpenAI(
+            api_key=self.api_key,
+            azure_endpoint=self.endpoint,
+            api_version=self.api_version
+        )
+
 
     def _encode_image(self, image_bytes: bytes) -> str:
         """Convert image bytes to base64"""
@@ -34,11 +52,19 @@ Extract ALL text from the given image as accurately and naturally as possible.
 - Preserve headings, numbers, formulas, and bullet points
 - Make the final output clean, readable, and well-formatted
 
-Return ONLY the extracted and formatted text. No explanations or extra comments."""
+FORMATTING RULES — STRICTLY FOLLOW:
+- Do NOT use any markdown formatting (no **, no *, no #, no _)
+- Do NOT use bold, italic, or any special formatting symbols
+- Use plain text ONLY
+- For paragraph labels like A, B, C — write as: A. B. C. (no asterisks)
+- Use actual newlines instead of \n characters
+- Separate paragraphs with a single blank line
+
+Return ONLY the extracted and formatted plain text. No explanations or extra comments."""
 
         try:
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=self.deployment,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {
@@ -57,6 +83,7 @@ Return ONLY the extracted and formatted text. No explanations or extra comments.
             )
 
             extracted_text = response.choices[0].message.content.strip()
+            extracted_text = extracted_text.replace('\\n', '\n').replace('\\t', '\t')
 
             if not extracted_text or extracted_text.lower() in ["no text", "empty"]:
                 extracted_text = "No readable text could be extracted from the image."

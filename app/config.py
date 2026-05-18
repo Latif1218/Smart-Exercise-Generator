@@ -33,10 +33,29 @@ class Settings(BaseSettings):
         env="MAX_FILE_SIZE_MB"
     )
 
-    openai_api_key: str = Field(
-        default=None, 
-        env="OPENAI_API_KEY"
+    # openai_api_key: str = Field(
+    #     default=None, 
+    #     env="OPENAI_API_KEY"
+    # )
+
+
+    azure_openai_api_key: str = Field(
+        default=None,
+        env="AZURE_OPENAI_API_KEY"
     )
+    azure_openai_endpoint: str = Field(
+        default=None,
+        env="AZURE_OPENAI_ENDPOINT"
+    )
+    azure_openai_deployment: str = Field(
+        default="gpt-4o",
+        env="AZURE_OPENAI_DEPLOYMENT"
+    )
+    azure_openai_api_version: str = Field(
+        default="2024-02-01",
+        env="AZURE_OPENAI_API_VERSION"
+    )
+
 
     app_name: str = Field(default="OCR Question Generator API", env="APP_NAME")
     app_env: str = Field(default="development", env="APP_ENV")
