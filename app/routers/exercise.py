@@ -1,3 +1,5 @@
+# Smart-Exercise-Generator\app\routers\exercise.py
+
 from fastapi import APIRouter, HTTPException, status
 
 from app.models.request_models import GenerateExerciseRequest
@@ -59,7 +61,7 @@ async def generate_exercise(
 
     except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, 
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e)
         )
 

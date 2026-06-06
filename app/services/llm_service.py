@@ -1,3 +1,5 @@
+# Smart-Exercise-Generator\app\services\llm_service.py
+
 import httpx
 import json
 from typing import List
@@ -11,180 +13,354 @@ DEEPSEEK_API_URL = f"{settings.deepseek_base_url}/v1/chat/completions"
 
 
 
+
 def _build_system_prompt() -> str:
     """
     Build the system prompt for DeepSeek.
     This defines the role and behavior of the LLM.
     """
     return """You are an expert English language teacher and question paper designer.
+Your job is to generate high-quality, completely original English practice questions based on the grammar pattern or content found in the given text.
+ 
+===================================================================
+STEP 0 — MANDATORY FIRST STEP: CONTENT SEPARATION & TYPE DETECTION
+===================================================================
+ 
+Before doing ANYTHING else, read the entire input text and perform the following:
+ 
+## A) DETECT CONTENT TYPE
+ 
+Look for these signals:
+ 
+WORKSHEET / EXAM PAPER signals:
+  - Numbered sentences with blanks:  "1. She ________ to school every day."
+  - Underscores used as blanks:       ________ or __________
+  - Exercise headers:                 "Fill in the blanks", "Exercise 1", "Section A"
+  - Verb hints in brackets:           "She ________ (go) to school."
+  - MCQ option lists:                 "A) walk  B) walked  C) walking  D) walks"
+  - Answer keys or model answers
+ 
+READING PASSAGE signals:
+  - Continuous prose paragraphs with no blanks
+  - Narrative or informational text
+  - No numbered exercise items
+ 
+→ If 2 or more WORKSHEET signals are found: treat as WORKSHEET / EXAM PAPER
+→ Otherwise: treat as READING PASSAGE
+ 
+## B) IF WORKSHEET / EXAM PAPER IS DETECTED:
+ 
+CRITICAL — TWO-PART SEPARATION:
+  Part 1 — SOURCE PATTERN : The grammar topic/pattern used (e.g., prepositions, past perfect tense, articles)
+  Part 2 — EXISTING QUESTIONS : The actual numbered sentences in the text
+ 
+ACTION:
+  ✅ EXTRACT the grammar pattern from Part 1
+  ❌ COMPLETELY DISCARD Part 2 (the existing sentences)
+  ✅ Generate BRAND NEW sentences using the extracted grammar pattern
+  ✅ New sentences must have entirely different subjects, verbs, objects, and contexts
+ 
+## C) THE GOLDEN RULE — NEVER COPY
+ 
+❌ FORBIDDEN — Input contains:  "Wait ________ your mother reaches home."
+❌ FORBIDDEN — Output copies:   "Wait ________ your mother reaches home."
+❌ FORBIDDEN — Output modifies: "Wait ________ your father reaches home."  ← still forbidden
+ 
+✅ CORRECT — Detect pattern:  TIME preposition (until / before / since / by)
+✅ CORRECT — New sentence:    "The students must remain seated ________ the teacher dismisses the class."
+✅ CORRECT — Answer:          until
+ 
+===================================================================
+STEP 1 — GRAMMAR TOPIC ANALYSIS
+===================================================================
+ 
+After detecting content type, identify which grammar topics are present:
+ 
+  • Tense (past simple, present perfect, future continuous, past perfect, etc.)
+  • Verb forms (base form, past participle, gerund, infinitive)
+  • Sentence structure (simple, compound, complex)
+  • Vocabulary and word meaning
+  • Comprehension (facts, inference, main idea)
+  • Parts of speech (noun, verb, adjective, adverb, pronoun, conjunction)
+  • Articles (a, an, the)
+  • Prepositions (time, place, direction, manner)
+  • Punctuation and grammar rules
+ 
+Also identify:
+  • Difficulty level: beginner / intermediate / advanced
+  • Sub-types of prepositions if topic is prepositions:
+      - Time prepositions: for, since, until, before, by, after, during, from...to
+      - Place prepositions: in, on, at, under, above, between, behind, near, beside
+      - Direction prepositions: to, into, through, across, along, over, up, down
+      - Transport prepositions: by, in, on (by bus, in a taxi, on a train)
+ 
+MULTIPLE TOPICS RULE:
+  - If more than one grammar topic is detected, distribute questions EVENLY across ALL topics
+  - NEVER generate all questions from only one sub-topic
+  - Example: 3 sub-topics + 12 questions → 4 questions per sub-topic
+ 
+===================================================================
+STEP 2 — QUESTION GENERATION RULES BY CONTENT TYPE
+===================================================================
+ 
+-------------------------------------------------------------------
+IF CONTENT TYPE IS WORKSHEET / EXAM PAPER:
+-------------------------------------------------------------------
+ 
+ABSOLUTE RULE: Every generated sentence must be 100% original.
+Only the grammar pattern is borrowed — never the words, never the structure.
+ 
+## MCQ FORMAT (Worksheet):
+ 
+Topic: TENSE / VERB FORMS
+  Sentence must always contain a blank with a verb hint:
+  ✅ "She ________ (walk) to school when it started raining."
+     A) walk  B) walked  C) was walking  D) had walked
+     Answer: C
+ 
+  ❌ NEVER ask theory questions like:
+     "What tense is used in the passage?"
+     "What is the past participle of 'go'?"
+ 
+Topic: PREPOSITION
+  Blank-based sentence, no verb hint:
+  ✅ "The train departs ________ six o'clock in the morning."
+     A) at  B) on  C) in  D) by
+     Answer: A
+ 
+Topic: ARTICLES
+  Blank-based sentence, no verb hint:
+  ✅ "She is ________ best student in the class."
+     A) a  B) an  C) the  D) no article
+     Answer: C
+ 
+Topic: PARTS OF SPEECH
+  Blank-based identification or usage:
+  ✅ "She speaks very ________."  (adverb question)
+     A) quiet  B) quietness  C) quietly  D) quieted
+     Answer: C
+ 
+Topic: VOCABULARY
+  Definition or contextual usage:
+  ✅ "A ________ is a person who is new to a job or activity."
+     A) veteran  B) novice  C) mentor  D) scholar
+     Answer: B
+ 
+## FILL IN THE BLANK FORMAT (Worksheet):
+ 
+Use exactly 8 underscores: ________
+ 
+Topic: TENSE / VERB FORMS → verb hint in bracket is MANDATORY
+  ✅ "By the time she arrived, he ________ (finish) his meal."
+  ✅ "They ________ (play) cricket when it started raining."
+  ❌ WRONG: "By the time she arrived, he ________ his meal."  ← no hint, forbidden
+ 
+Topic: PREPOSITION → NO verb hint
+  ✅ "The dog hid ________ the table during the thunderstorm."
+  ✅ "We have been friends ________ childhood."
+  ✅ "She travelled to London ________ train."
+ 
+Topic: ARTICLES → NO verb hint
+  ✅ "________ Amazon is the largest river in the world."
+  ✅ "She bought ________ umbrella and ________ pair of gloves."
+ 
+Topic: PARTS OF SPEECH → NO verb hint
+  ✅ "She cried ________ she was deeply moved."  (conjunction)
+  ✅ "The book is kept ________ the shelf."       (preposition)
+ 
+Topic: VOCABULARY → NO verb hint — definition-based format ONLY
+  ✅ "A ________ is a doctor who specializes in treating children."
+  ✅ "The ________ of the painting left everyone speechless."
+  ❌ FORBIDDEN: "A ________ (manage) person on the farm"
+ 
+## SHORT ANSWER FORMAT (Worksheet):
+ 
+Topic: TENSE/VERB FORMS → grammar transformation only
+  ✅ "Rewrite in past perfect: 'She finishes her homework.'"
+  ✅ "Change to present continuous: 'He reads a book.'"
+ 
+Topic: PREPOSITION → correction or usage
+  ✅ "Correct the preposition: 'He is good in swimming.'"
+  ✅ "Rewrite using 'since' or 'for': 'She has lived here from 2015.'"
+ 
+Topic: ARTICLES → correction or usage
+  ✅ "Fill in the correct article: '________ sun rises in the east.'"
+  ✅ "Correct the article error: 'He is an honest man.'"  ← (this is already correct; test understanding)
+ 
+Topic: PARTS OF SPEECH → identification or usage
+  ✅ "Identify the part of speech of 'quickly' in: 'She ran quickly.'"
+  ✅ "Replace the blank with a suitable conjunction: 'She was tired ________ she kept going.'"
+ 
+Topic: VOCABULARY → synonym / antonym / usage only
+  ✅ "Replace the underlined word with its synonym: 'He is a brave soldier.'"
+  ✅ "Write the antonym of 'generous' and use it in a sentence."
+  ✅ "Use the word 'resilient' in a meaningful sentence."
+  ❌ FORBIDDEN: "What is the term for...?"
+  ❌ FORBIDDEN: "What is the meaning of...?"
+ 
+NEVER ask comprehension questions (Why/What happened) for worksheet content.
+ 
+-------------------------------------------------------------------
+IF CONTENT TYPE IS READING PASSAGE:
+-------------------------------------------------------------------
+ 
+Generate questions that test understanding of the passage.
+ 
+## MCQ FORMAT (Passage):
+  Factual questions directly answerable from the text:
+  ✅ "What did the writer find under his foot?"
+     A) A coin  B) A note  C) A key  D) Nothing
+     Answer: A
 
-Your job is to generate high-quality English practice questions from the given text.
 
----
+     ## MCQ QUALITY RULES — READING PASSAGE:
 
-## BEFORE GENERATING, ANALYZE THE TEXT FOR:
+1. COVERAGE RULE:
+   - Questions must be distributed across ALL paragraphs
+   - At least 1 question per paragraph if 5+ paragraphs exist
+   - NEVER ignore the final paragraphs
 
-1. **Language Topics Present:**
-   - Tense (past simple, present perfect, future continuous, etc.)
-   - Verb forms (base form, past participle, gerund, infinitive)
-   - Sentence structure (simple, compound, complex)
-   - Vocabulary and word meaning
-   - Comprehension (facts, inference, main idea)
-   - Parts of speech (noun, verb, adjective, adverb, pronoun)
-   - Articles (a, an, the)
-   - Prepositions
-   - Punctuation and grammar rules
+2. NO REPETITION RULE:
+   - Each question must test a DIFFERENT fact
+   - If two questions have the same answer → delete one, 
+     replace with question from uncovered paragraph
 
-2. **Difficulty Level:** beginner / intermediate / advanced
+3. ANSWER DISTRIBUTION RULE:
+   - Correct answer must be distributed across A, B, C, D
+   - NEVER have more than 3 questions with the same answer label
+   - Aim for: A×2-3, B×2-3, C×2-3, D×2-3
 
-3. **Content Type Detection:**
-   - WORKSHEET/EXAM PAPER: Contains blanks, verb hints in brackets, exercise numbers
-   - READING PASSAGE: Contains continuous prose text for comprehension
+4. QUESTION WORDING RULE:
+   - Question must make sense WITHOUT the answer
+   - ❌ WRONG: "What did the Iceman carry that was an unfinished bow?"
+   - ✅ RIGHT:  "What material was the Iceman's unfinished bow made from?"
 
-4. **Multiple Topic Detection — CRITICAL:**
-   - Carefully read the ENTIRE text before generating
-   - Identify ALL grammar topics present, not just the first one
-   - Example: A worksheet may contain Tense + Articles + Parts of Speech together
-   - List all detected topics mentally before starting question generation
-   - Distribute questions proportionally across ALL detected topics
+5. DISTRACTOR QUALITY RULE:
+   - Wrong options must be plausible, not obviously wrong
+   - ❌ "He was buried in a special tomb" ← obviously wrong
+   - ✅ "He was wearing elaborate ceremonial garments" ← plausible
 
-   *** IF MULTIPLE TOPICS ARE PRESENT: ***
-   - NEVER generate all questions from only one topic
-   - MUST cover every detected topic at least once
-   - Distribute evenly: if 12 questions and 3 topics → 4 questions per topic
-   - Each question type (MCQ, Fill in Blank, Short Answer) should also cover multiple topics
+     
+## FILL IN THE BLANK FORMAT (Passage):
+  CURRENT WRONG APPROACH:
+  ❌ Original sentence: "He wore shoes with bearskin soles."
+  ❌ Output:            "He wore shoes with ________ soles."  ← sentence copy
 
----
+  CORRECT APPROACH:
+    ✅ Read the fact from the passage
+    ✅ Write a NEW sentence that expresses the same fact differently
+    ✅ Remove one key word as the blank
 
-## QUESTION GENERATION RULES BY CONTENT TYPE:
+  EXAMPLE:
+    Passage says: "...a birchbark container of embers wrapped in maple leaves"
+  
+    ❌ WRONG: "He carried a birchbark container of embers wrapped in ________ leaves."
+               ← copied from passage
+  
+    ✅ CORRECT: "To keep fire alive during his journey, the Iceman stored 
+                 embers inside a container made of ________."
+                 Answer: birchbark
 
-### IF CONTENT TYPE IS WORKSHEET/EXAM PAPER:
+    ✅ CORRECT: "The Iceman used ________ leaves to wrap the embers 
+                 he carried in his container."
+                 Answer: maple
 
-**CRITICAL RULE: NEVER copy, reuse, or slightly modify any sentence from the original text.
-Identify the grammar pattern only, then create COMPLETELY NEW sentences.**
+  Rules:
+  - New sentence must be rewritten — not copied from the passage
+  - The blank must test a KEY FACT from the passage
+  - Answer must be directly supported by the passage
+  - Sentence structure must be different from the original
 
-**TENSE / VERB FORMS:**
 
-- MCQ format MUST always be blank-based:
-  CORRECT FORMAT:
-  "She ________ (walk) to school when it started raining."
-  A) walk  B) walked  C) was walking  D) had walked
+## FILL IN THE BLANK — READING PASSAGE — QUALITY RULES:
 
-  NEVER use these formats:
-  - "What tense is used in Exercise 4?"
-  - "What is the past participle of 'hear'?"
-  - "Which tense is primarily used in the passage?"
+LEVEL OF QUESTIONS — MANDATORY:
+  Generate questions at THREE levels:
+  - Factual   (4 questions): Direct facts from passage, but sentence must be rewritten
+  - Inferential (3 questions): Requires understanding, not just finding a word
+  - Analytical  (3 questions): Why/What does it suggest/What does it indicate
 
-- Fill in the Blank format:
-  Use exactly 8 underscores: ________
+FACTUAL — Acceptable:
+  ✅ "The Iceman stored fire-starting embers in a container crafted 
+      from ________ bark."
+  Answer: birch
+  (Sentence rewritten, tests a meaningful fact)
 
-  IF grammar topic is TENSE or VERB FORMS:
-    Always include verb hint in bracket — MANDATORY
-    CORRECT: "By the time he arrived, she ________ (leave) the room."
-    WRONG: "By the time he arrived, she ________ the room."
+  ❌ NOT acceptable — too trivial:
+  "The location was a ________ hollow."
+  Answer: rocky
+  (Anyone can guess this without reading)
 
-  IF grammar topic is ARTICLES:
-    No verb hint needed
-    CORRECT: "________ Eiffel Tower is one of the most visited monuments."
-    CORRECT: "She bought ________ umbrella and ________ bag."
+INFERENTIAL — Required format:
+  ✅ "The presence of a copper-bladed ax suggested the Iceman 
+      held ________ in his society."
+  Answer: considerable social significance
 
-  IF grammar topic is PARTS OF SPEECH:
-    No verb hint needed
-    CORRECT: "She cried ________ she was sad." (conjunction)
-    CORRECT: "The plane flew ________ the mountains." (preposition/adverb)
+  ✅ "The half-finished arrows suggest the Iceman had recently 
+      been in a ________."
+  Answer: conflict / fight / battle
 
-  IF grammar topic is PREPOSITION:
-    No verb hint needed
-    CORRECT: "She walked ________ the park to find her keys."
+ANALYTICAL — Required format:
+  ✅ "Scientists believe the Iceman grew up in Valle Isarco 
+      based on analysis of ________ in his teeth."
+  Answer: isotopes
 
-  IF grammar topic is VOCABULARY or WORD MEANING:
-    *** STRICTLY NO verb hint in bracket — this is a HARD RULE ***
-    *** ANY format like "________ (verb)" is COMPLETELY FORBIDDEN ***
-    Use definition-based format ONLY:
-    CORRECT: "A ________ is a person who rules a country as its supreme leader."
-    CORRECT: "The ________ of the forest calmed the troubled mind."
-    WRONG (FORBIDDEN): "A person who ________ (manage) a farm"
-    WRONG (FORBIDDEN): "The room was ________ (illuminate) by a lamp"
+  ✅ "Klaus Oeggl compared the Iceman's death site to a 
+      ________ scene."
+  Answer: paleo crime
 
-- Short Answer format (WORKSHEET ONLY):
-  Questions must match the grammar topic detected:
+BANNED — trivial blanks:
+  ❌ "________ hollow"        → Answer: rocky     (too easy)
+  ❌ "________ skin"          → Answer: deer      (too easy)
+  ❌ "________ blossoms"      → Answer: hornbeam  (just reading)
 
-  IF TENSE/VERB FORMS:
-  - "Rewrite in past perfect: 'She finishes her work.'"
-  - "Change the sentence to past continuous tense."
+RULE: The blank must test UNDERSTANDING, not just READING.
+Ask yourself: "Can someone answer this without understanding 
+the passage?" If YES → rewrite the question.
+ 
+ ## SHORT ANSWER FORMAT (Passage):
+  Why / How / Describe / Explain type questions:
+  ✅ "Why did the man claim he was on his knees?"
+  ✅ "How did the writer feel after receiving the news?"
+ 
+  
+===================================================================
+STEP 3 — STRICT OUTPUT RULES
+===================================================================
+ 
+1.  MCQ must ALWAYS have exactly 4 options: A, B, C, D
+2.  Fill in the blank must use exactly 8 underscores: ________
+3.  Fill in the blank and short answer must always have:  "options": null
+4.  The "answer" field must NEVER be null or empty
+5.  NEVER copy or slightly modify any sentence from the input text
+6.  ALL generated sentences must be 100% original
+7.  Only the grammar pattern or topic is borrowed — never the words
+8.  Verb hint in bracket is MANDATORY for tense/verb topics:   ________ (leave)
+9.  Verb hint must NEVER appear for: articles, prepositions, parts of speech, vocabulary
+10. For vocabulary fill-in-the-blank: ALWAYS use definition-based format only
+11. If multiple grammar topics are detected: distribute questions EVENLY across ALL topics
+12. NEVER generate all questions from a single sub-topic when multiple exist
+13. Respond with valid JSON ONLY — no explanation, no markdown, no extra text
+ 
+===================================================================
+FINAL REMINDER BEFORE GENERATING
+===================================================================
+ 
+Ask yourself these questions before writing the first question:
+ 
+  ✔ Have I identified the content type correctly? (worksheet vs passage)
+  ✔ Have I discarded all existing sentences from the input?
+  ✔ Have I identified ALL grammar sub-topics present?
+  ✔ Are my new sentences 100% original with different contexts?
+  ✔ Have I distributed questions across all detected topics?
+  ✔ Does every fill-in-the-blank use exactly 8 underscores?
+  ✔ Did I add verb hints ONLY where the topic is tense/verb forms?
+  ✔ Is my output pure valid JSON with no extra text?
+ 
+If any answer is NO — fix it before outputting.
+ 
+You MUST respond with valid JSON only — no explanation, no markdown, just pure JSON."""
 
-  IF ARTICLES:
-  - "Fill in the correct article: '________ sun rises in the east.'"
-  - "Correct the article in the sentence: 'She is an honest woman.'"
-
-  IF PARTS OF SPEECH:
-  - "Identify the part of speech of the underlined word: 'She runs fast.'"
-  - "Replace the blank with the correct conjunction: 'She was tired ________ she kept working.'"
-
-  IF PREPOSITION:
-  - "Correct the preposition: 'He is good in mathematics.'"
-  - "Rewrite using since or for: They lived here from 2010."
-
-  IF VOCABULARY/WORD MEANING:
-  - "Replace the underlined word with its synonym: 'He is a brave man.'"
-  - "Use the word 'lachrymose' in a meaningful sentence."
-  - "Write the antonym of 'benevolent' and use it in a sentence."
-
-  *** STRICTLY FORBIDDEN for Vocabulary Short Answer: ***
-  - NEVER ask "What is the term for...?" — this is a comprehension question
-  - NEVER ask "What is the meaning of...?" — this is a comprehension question
-  - ONLY ask transformation/usage questions
-
-  NEVER ask comprehension questions like "Why did the man...?" for any worksheet content.
-
----
-
-### IF CONTENT TYPE IS READING PASSAGE:
-
-**COMPREHENSION:**
-
-- MCQ: Factual questions directly from the passage
-  "What did the writer find under his foot?"
-  A) A coin  B) A note  C) A key  D) Nothing
-
-- Fill in the Blank: Key information gaps from the passage
-  "The writer found a ________ coin under his foot."
-
-- Short Answer: "Why", "How", "Describe", "Explain" type questions
-  - "Why did the man claim he was on his knees?"
-  - "How did the writer feel about his exam performance?"
-
----
-
-## STRICT OUTPUT RULES:
-
-1. MCQ must ALWAYS have exactly 4 options (A, B, C, D)
-2. Fill in the blank must use ________ (8 underscores)
-3. Fill in the blank and short answer must have options: null
-4. answer field must NEVER be null or empty
-5. All questions must match the grammar pattern found in the text
-6. NEVER copy or slightly modify sentences from the original text
-7. ALL new sentences must be completely original
-8. Only the grammar pattern/structure should match the original
-9. For worksheet fill-in-the-blank:
-   - TENSE/VERB FORMS topic: verb hint in bracket is MANDATORY e.g. ________ (leave)
-   - ARTICLES topic: NO verb hint e.g. "________ Nile is the longest river."
-   - PARTS OF SPEECH topic: NO verb hint e.g. "She cried ________ she was sad."
-   - PREPOSITION topic: NO verb hint e.g. "She walked ________ the park."
-   - VOCABULARY topic: NO verb hint EVER, definition-based format ONLY
-     e.g. "A ________ is a person who rules a country." Answer: monarch
-10. For worksheet short answer:
-    - TENSE: grammar transformation only
-    - ARTICLES: article correction/usage only
-    - PARTS OF SPEECH: identification/usage only
-    - PREPOSITION: preposition correction/usage only
-    - VOCABULARY: synonym/antonym/usage only — NEVER "What is the term for...?"
-11. *** MULTIPLE TOPICS RULE — STRICTLY ENFORCED: ***
-    - If the text contains multiple grammar topics, questions MUST cover ALL topics
-    - NEVER generate all questions from only one topic
-    - Distribute questions evenly across all detected topics
-    - Example: Tense + Articles + Parts of Speech → each topic gets equal questions
-12. You MUST respond with valid JSON only — no explanation, no markdown, just pure JSON"""
 
 
 
@@ -201,132 +377,257 @@ def _build_user_prompt(
     Build the user prompt for question generation.
     The prompt varies depending on content type and selected question types.
     """
-
-    # ---- Type Descriptions ----
+ 
+    # ================================================================
+    # SECTION 1 — AUTO CONTENT TYPE DETECTION HINT
+    # ================================================================
+    # Even though content_type comes from the request, we give the LLM
+    # an explicit signal to override if it detects worksheet patterns.
+ 
+    auto_detect_hint = """⚠️ CONTENT TYPE AUTO-CHECK (Do this before anything else):
+Read the input text carefully. If you find ANY of these signals:
+  - Numbered sentences with blanks:  "1. She ________ to school."
+  - Underscores used as blanks:       ________
+  - Exercise headers:                 "Fill in the blanks", "Exercise 1"
+  - Verb hints in brackets:           ________ (go)
+  - MCQ option lists already present: A) walk  B) walked
+ 
+→ OVERRIDE content type to: WORKSHEET / EXAM PAPER
+→ DISCARD all existing sentences from the text
+→ EXTRACT grammar pattern only
+→ GENERATE completely new sentences
+ 
+If NONE of the above signals are found → treat as READING PASSAGE."""
+ 
+    # ================================================================
+    # SECTION 2 — ANTI-COPY ENFORCEMENT BLOCK
+    # ================================================================
+ 
+    anti_copy_block = """🚨 ANTI-COPY RULE — ZERO TOLERANCE:
+ 
+FORBIDDEN (even if slightly changed):
+  ❌ Input:  "Wait ________ your mother reaches home."
+  ❌ Output: "Wait ________ your mother reaches home."       ← exact copy
+  ❌ Output: "Wait ________ your father reaches home."       ← word swap, still forbidden
+  ❌ Output: "Please wait ________ your mother comes home."  ← minor rewording, still forbidden
+ 
+REQUIRED:
+  ✅ Detect pattern:  TIME preposition (until / before / since / by / after)
+  ✅ New sentence:    "The students must remain seated ________ the teacher dismisses the class."
+  ✅ Answer:          until
+ 
+Every single generated sentence must have a DIFFERENT:
+  - Subject (not the same person/animal/thing from input)
+  - Verb (not the same action from input)
+  - Context (not the same situation from input)"""
+ 
+    # ================================================================
+    # SECTION 3 — QUESTION TYPE DESCRIPTIONS
+    # ================================================================
+ 
     if content_type == ContentType.WORKSHEET_EXAM_PAPER:
         type_descriptions = {
-            QuestionType.MCQ: "Blank-based MCQ with 4 tense/verb options (A, B, C, D). Format: 'She ________ (go) to school.' — NEVER ask theory questions like 'What tense is used?'",
-            QuestionType.FILL_IN_THE_BLANK: "New sentence with same grammar pattern as the worksheet. Verb hint in bracket is MANDATORY. Format: 'By the time he arrived, she ________ (leave) the room.'",
-            QuestionType.SHORT_ANSWER: "Grammar transformation questions ONLY. Format: 'Rewrite in past perfect: She finishes her work.' — NEVER ask comprehension questions."
+            QuestionType.MCQ: (
+                "Blank-based MCQ — 4 options (A, B, C, D).\n"
+                "  For TENSE topic:       'She ________ (walk) to school when it started raining.'\n"
+                "  For PREPOSITION topic: 'The flight departs ________ 6 AM tomorrow.'\n"
+                "  For ARTICLES topic:    'She is ________ best player on the team.'\n"
+                "  For VOCABULARY topic:  'A ________ is a person who is new to a job or activity.'\n"
+                "  ❌ NEVER ask: 'What tense is used?' or 'What is the past participle of...?'"
+            ),
+            QuestionType.FILL_IN_THE_BLANK: (
+                "New blank-based sentence using the same grammar pattern.\n"
+                "  For TENSE topic:       verb hint MANDATORY → 'She ________ (finish) her work before noon.'\n"
+                "  For PREPOSITION topic: NO verb hint → 'He has been waiting ________ morning.'\n"
+                "  For ARTICLES topic:    NO verb hint → '________ Nile is the longest river in the world.'\n"
+                "  For VOCABULARY topic:  definition-based ONLY → 'A ________ is a ruler of a kingdom.'\n"
+                "  ❌ NEVER copy any sentence from the original text"
+            ),
+            QuestionType.SHORT_ANSWER: (
+                "Grammar transformation or usage questions ONLY.\n"
+                "  For TENSE topic:       'Rewrite in past perfect: She finishes her homework.'\n"
+                "  For PREPOSITION topic: 'Correct the preposition: He is good in mathematics.'\n"
+                "  For ARTICLES topic:    'Fill in the correct article: ________ sun rises in the east.'\n"
+                "  For VOCABULARY topic:  'Write the antonym of generous and use it in a sentence.'\n"
+                "  ❌ NEVER ask comprehension questions like 'Why did...?' or 'What happened...?'"
+            ),
         }
     else:
         type_descriptions = {
-            QuestionType.MCQ: "Comprehension MCQ with 4 options (A, B, C, D) directly based on the passage",
-            QuestionType.FILL_IN_THE_BLANK: "Key information gap from the passage. Format: 'The writer found a ________ coin under his foot.'",
-            QuestionType.SHORT_ANSWER: "Why / How / Explain / Describe type comprehension questions answerable in 1-2 sentences"
+            QuestionType.MCQ: (
+                "Comprehension MCQ — 4 options (A, B, C, D) directly based on the passage.\n"
+                "  Example: 'What did the writer find under his foot?'\n"
+                "           A) A coin  B) A note  C) A key  D) Nothing"
+            ),
+            QuestionType.FILL_IN_THE_BLANK: (
+                "Key information gap from the passage — use exactly 8 underscores.\n"
+                "  Example: 'The writer found a ________ coin under his foot.'\n"
+                "  Answer must be a word or phrase directly from the passage."
+            ),
+            QuestionType.SHORT_ANSWER: (
+                "Why / How / Describe / Explain type questions answerable in 1–2 sentences.\n"
+                "  Example: 'Why did the man claim he was on his knees?'\n"
+                "           'How did the writer feel after receiving the news?'"
+            ),
         }
-
-    selected_types = [type_descriptions[qt] for qt in question_types]
-    types_text = "\n".join([f"- {t}" for t in selected_types])
-
-    # ---- Content Instruction ----
+ 
+    selected_type_lines = []
+    for qt in question_types:
+        selected_type_lines.append(f"- {type_descriptions[qt]}")
+    types_text = "\n".join(selected_type_lines)
+ 
+    # ================================================================
+    # SECTION 4 — CONTENT INSTRUCTION BLOCK
+    # ================================================================
+ 
     if content_type == ContentType.WORKSHEET_EXAM_PAPER:
         content_instruction = """CONTENT TYPE: WORKSHEET / EXAM PAPER
-
-STEP 1: Carefully read the text and identify the grammar pattern
-        (e.g., past perfect, past continuous, present perfect)
-STEP 2: Do NOT use any sentence from the original text
-STEP 3: Create COMPLETELY NEW sentences using the SAME grammar pattern
-
-EXAMPLE — If worksheet tests past perfect tense:
-  MCQ:
-  "By the time she arrived, he ________ (leave) the room."
-  A) leave  B) left  C) was leaving  D) had left
-  Answer: D
-
-  Fill in the Blank:
-  "She ________ (finish) her work before the bell rang."
-  Answer: had finished
-
-  Short Answer:
-  "Rewrite in past perfect: 'He eats his dinner.'"
-  Answer: He had eaten his dinner."""
-
+ 
+Follow these steps strictly:
+  STEP 1 — Read the entire text and identify the grammar topic(s):
+            (e.g., prepositions of time/place/direction, past perfect, articles, vocabulary)
+  STEP 2 — If multiple sub-topics exist, list all of them mentally
+  STEP 3 — DISCARD all original sentences from the text completely
+  STEP 4 — Generate BRAND NEW sentences using the same grammar pattern(s)
+  STEP 5 — Distribute questions evenly if multiple sub-topics were detected
+ 
+WORKED EXAMPLE — If worksheet tests PREPOSITION (time + place):
+  Detected sub-topics: time prepositions, place prepositions
+  Total questions: 6 → 3 per sub-topic
+ 
+  Fill in the Blank (time):
+    "She has been studying ________ early morning."
+    Answer: since
+ 
+  Fill in the Blank (place):
+    "The cat was hiding ________ the sofa during the storm."
+    Answer: under
+ 
+  MCQ (time):
+    "The meeting was scheduled ________ Friday afternoon."
+    A) at  B) on  C) in  D) by
+    Answer: B
+ 
+  MCQ (place):
+    "He stood ________ the window, watching the rain fall."
+    A) between  B) beside  C) through  D) across
+    Answer: B"""
+ 
     else:
         content_instruction = """CONTENT TYPE: READING PASSAGE
-
+ 
 Generate questions that test comprehension and understanding of the passage.
-Questions must be directly based on facts, events, and ideas in the text."""
-
-    # ---- Question Distribution ----
+All questions must be directly based on facts, events, and ideas written in the text.
+Do not ask questions about information not present in the passage."""
+ 
+    # ================================================================
+    # SECTION 5 — QUESTION DISTRIBUTION
+    # ================================================================
+ 
     questions_per_type = number_of_questions // len(question_types)
     remainder = number_of_questions % len(question_types)
-
+ 
     distribution_parts = []
     for i, qt in enumerate(question_types):
         count = questions_per_type + (1 if i < remainder else 0)
         distribution_parts.append(f"{qt.value}: {count} questions")
     distribution_text = ", ".join(distribution_parts)
-
-    # ---- Important Rules ----
+ 
+    # ================================================================
+    # SECTION 6 — FINAL RULES REMINDER
+    # ================================================================
+ 
     if content_type == ContentType.WORKSHEET_EXAM_PAPER:
-        important_rules = """Important rules:
-1. MCQ must always have exactly 4 options (A, B, C, D)
-2. Fill in the blank must use ________ (8 underscores)
-3. NEVER copy, reuse, or slightly modify any sentence from the original text
-4. ALL sentences must be completely new and original
-5. Verb hint in bracket is MANDATORY for every fill in the blank: ________ (verb)
-6. Short answer must be grammar transformation questions ONLY
-7. NEVER ask comprehension questions like 'Why did...?' or 'What did...?' for worksheet content
-8. Answers must be grammatically correct"""
-
+        final_rules = """Final rules before generating:
+1.  MCQ must always have exactly 4 options (A, B, C, D)
+2.  Fill in the blank must use ________ (exactly 8 underscores)
+3.  "options" field must be null for fill_in_the_blank and short_answer
+4.  "answer" field must NEVER be null or empty
+5.  NEVER copy, reuse, or slightly modify any sentence from the input text
+6.  ALL generated sentences must be 100% original with different subjects and contexts
+7.  Verb hint ________ (verb) is MANDATORY for tense/verb topics ONLY
+8.  NO verb hint for preposition, articles, parts of speech, vocabulary topics
+9.  For vocabulary fill-in-the-blank: use definition-based format ONLY
+10. Short answer must be grammar transformation or usage questions ONLY
+11. If multiple grammar sub-topics detected: distribute questions evenly across ALL of them
+12. Output must be valid JSON only — no explanation, no markdown"""
+ 
     else:
-        important_rules = """Important rules:
-1. MCQ must always have exactly 4 options (A, B, C, D)
-2. Fill in the blank must use ________ (8 underscores)
-3. All questions must be directly based on the passage
-4. Fill in the blank and short answer must have options: null
-5. Short answer must be answerable in 1-2 sentences
-6. Answers must be accurate and factual"""
-
-    return f"""Based on the following text, generate exactly {number_of_questions} questions.
-
+        final_rules = """Final rules before generating:
+1.  MCQ must always have exactly 4 options (A, B, C, D)
+2.  Fill in the blank must use ________ (exactly 8 underscores)
+3.  "options" field must be null for fill_in_the_blank and short_answer
+4.  "answer" field must NEVER be null or empty
+5.  All questions must be directly based on the passage content
+6.  Short answer must be answerable in 1–2 sentences
+7.  Answers must be accurate and taken from the passage
+8.  Output must be valid JSON only — no explanation, no markdown"""
+ 
+    # ================================================================
+    # SECTION 7 — FINAL PROMPT ASSEMBLY
+    # ================================================================
+ 
+    return f"""Generate exactly {number_of_questions} questions based on the text below.
+ 
+{auto_detect_hint}
+ 
+---
+ 
+{anti_copy_block}
+ 
+---
+ 
 {content_instruction}
-
-Generate these types of questions:
+ 
+---
+ 
+Generate these question types:
 {types_text}
-
+ 
 Question distribution: {distribution_text}
-
+ 
+---
+ 
 TEXT TO USE:
 \"\"\"
 {text}
 \"\"\"
-
-Respond ONLY with this exact JSON structure, no other text:
+ 
+---
+ 
+Respond ONLY with this exact JSON structure — no other text, no markdown:
 {{
   "questions": [
     {{
       "question_number": 1,
       "question_type": "mcq",
-      "question_text": "question based on detected grammar pattern from text",
+      "question_text": "completely new sentence based on detected grammar pattern",
       "options": [
         {{"label": "A", "text": "option 1"}},
         {{"label": "B", "text": "option 2"}},
         {{"label": "C", "text": "option 3"}},
         {{"label": "D", "text": "option 4"}}
       ],
-      "answer": "correct option label"
+      "answer": "correct option label (A / B / C / D)"
     }},
     {{
       "question_number": 2,
       "question_type": "fill_in_the_blank",
-      "question_text": "new sentence with blank based on detected grammar pattern",
+      "question_text": "completely new sentence with ________ blank",
       "options": null,
-      "answer": "correct answer"
+      "answer": "correct word or phrase"
     }},
     {{
       "question_number": 3,
       "question_type": "short_answer",
-      "question_text": "grammar transformation question based on detected pattern",
+      "question_text": "grammar transformation or usage question",
       "options": null,
-      "answer": "correct answer"
-   }}
+      "answer": "correct transformed sentence or usage example"
+    }}
   ]
 }}
-
-{important_rules}"""
-
+ 
+{final_rules}"""
 
 
 
