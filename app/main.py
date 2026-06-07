@@ -66,7 +66,8 @@ async def health_check():
         "status": "healthy",
         "services": {
             "ocr": "available",
-            "llm": "available"
+            "llm": "available",
+            "OpenAIOCR": "available"
         }
     }
 
