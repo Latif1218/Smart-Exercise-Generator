@@ -114,6 +114,30 @@ FORMAT 6 — SHORT ANSWER / TRANSFORMATION:
   Signal: "Rewrite the sentence", "Change the tense", "Answer in one sentence"
   → Generate: New transformation or short answer questions
 
+FORMAT 7 — TENSE IDENTIFICATION / CORRECTION:
+  Signal: Verbs numbered in brackets within a passage
+          "(1) opened", "(2) saw", "(3) heard"
+  Meaning: These numbered verbs are to be identified
+           or corrected for tense
+
+  → Detect the TENSE PATTERN from the numbered verbs
+  → Generate NEW fill-in-the-blank sentences
+    testing the SAME tense patterns
+  → Use verb hint in bracket: ________ (verb)
+  → NEVER generate comprehension questions from this text
+  → NEVER copy any sentence from the passage
+
+  EXAMPLE:
+  Original: "When I (1) opened the door I (2) saw a man"
+  Pattern detected: Past Simple + Past Continuous
+
+  ✅ CORRECT output:
+  "She ________ (read) a book when the lights went out."
+  Answer: was reading  ← Past Continuous
+
+  "By the time he arrived, she ________ (finish) her work."
+  Answer: had finished  ← Past Perfect
+
 ## FORMAT PRESERVATION RULE — STRICTLY ENFORCED:
 
   Fill in the Blank    → must generate Fill in the Blank
@@ -485,6 +509,20 @@ Generate questions that test understanding of the passage content — NOT gramma
      - The FINAL paragraph is scientifically most important — give it at least 2 questions
      - NEVER skip any paragraph
 
+  2. MANDATORY PARAGRAPH VERIFICATION:
+        Before finalizing output, count the paragraphs (A, B, C, D, E...)
+          Then verify:
+            Paragraph A → at least 1 question ✔
+            Paragraph B → at least 1 question ✔
+            Paragraph C → at least 1 question ✔
+            Paragraph D → at least 1 question ✔
+            Paragraph E → at least 2 questions ✔ (most important)
+
+        If ANY paragraph has 0 questions:
+            → Find the most trivial existing question
+            → Replace it with a question from the uncovered paragraph
+            → Do NOT finalize output until all paragraphs are covered
+
   2. NO REPETITION RULE:
      - Each question must test a DIFFERENT fact
      - If two questions have the same answer → delete one, replace from uncovered paragraph
@@ -512,6 +550,13 @@ Generate questions that test understanding of the passage content — NOT gramma
      - Factual questions (direct recall):     40% of total
      - Inferential questions (understand):    35% of total
      - Analytical questions (why/suggest):    25% of total
+
+  7. For exactly 4 MCQ questions:
+      - Q1 answer: A or D
+      - Q2 answer: B or C  
+      - Q3 answer: C or B
+      - Q4 answer: D or A
+      → All 4 labels must appear exactly once
 
 ## FILL IN THE BLANK FORMAT (Passage):
 
@@ -545,6 +590,19 @@ Generate questions that test understanding of the passage content — NOT gramma
   RULE: Ask yourself — "Can someone answer this without understanding the passage?"
         If YES → rewrite the question.
 
+  SELF-CHECK — before writing each fill_in_the_blank question:
+    ✔ Is the sentence rewritten differently from the passage?
+    ✔ Is the blank word testing a KEY FACT or INFERENCE?
+    ✔ Is the answer a simple adjective like "rocky/small/yellow"?
+      If YES → reject and rewrite as inferential question
+    ✔ Does the question require reading AND understanding?
+      If NO → reject and rewrite
+
+  BANNED ANSWER TYPES for fill_in_the_blank (passage):
+    ❌ Simple adjectives: rocky, small, yellow, old
+    ❌ Obvious nouns directly lifted: deer, maple, bearskin
+    ❌ Any word that appears immediately next to the blank in original
+
 ## SHORT ANSWER FORMAT (Passage):
 
   Why / How / Describe / Explain type questions:
@@ -570,6 +628,14 @@ STEP 5 — STRICT OUTPUT RULES
 12. NEVER generate all questions from a single sub-topic when multiple exist
 13. ALWAYS preserve the original exercise format — NEVER convert to a different format
 14. For reading passage MCQ: answer labels must be distributed across A, B, C, D
+13. QUESTION TYPE OVERRIDE — STRICTLY FORBIDDEN:
+    - Generate ONLY the question types the user has requested
+    - If user requests ["fill_in_the_blank"] → generate ONLY fill_in_the_blank
+    - If user requests ["mcq"] → generate ONLY mcq
+    - NEVER add mcq if user did not request it
+    - NEVER add short_answer if user did not request it
+    - NEVER mix question types unless ALL requested types were listed
+    - This is the most critical rule — violating it is a severe error
 15. Respond with valid JSON ONLY — no explanation, no markdown, no extra text
 
 ===================================================================
@@ -603,6 +669,271 @@ You MUST respond with valid JSON only — no explanation, no markdown, just pure
 
 
 
+# def _build_user_prompt(
+#     text: str,
+#     question_types: List[QuestionType],
+#     number_of_questions: int,
+#     content_type: ContentType
+# ) -> str:
+#     """
+#     Build the user prompt for question generation.
+#     The prompt varies depending on content type and selected question types.
+#     """
+ 
+#     # ================================================================
+#     # SECTION 1 — AUTO CONTENT TYPE DETECTION HINT
+#     # ================================================================
+#     # Even though content_type comes from the request, we give the LLM
+#     # an explicit signal to override if it detects worksheet patterns.
+ 
+#     auto_detect_hint = """⚠️ CONTENT TYPE AUTO-CHECK (Do this before anything else):
+# Read the input text carefully. If you find ANY of these signals:
+#   - Numbered sentences with blanks:  "1. She ________ to school."
+#   - Underscores used as blanks:       ________
+#   - Exercise headers:                 "Fill in the blanks", "Exercise 1"
+#   - Verb hints in brackets:           ________ (go)
+#   - MCQ option lists already present: A) walk  B) walked
+ 
+# → OVERRIDE content type to: WORKSHEET / EXAM PAPER
+# → DISCARD all existing sentences from the text
+# → EXTRACT grammar pattern only
+# → GENERATE completely new sentences
+ 
+# If NONE of the above signals are found → treat as READING PASSAGE."""
+ 
+#     # ================================================================
+#     # SECTION 2 — ANTI-COPY ENFORCEMENT BLOCK
+#     # ================================================================
+ 
+#     anti_copy_block = """🚨 ANTI-COPY RULE — ZERO TOLERANCE:
+ 
+# FORBIDDEN (even if slightly changed):
+#   ❌ Input:  "Wait ________ your mother reaches home."
+#   ❌ Output: "Wait ________ your mother reaches home."       ← exact copy
+#   ❌ Output: "Wait ________ your father reaches home."       ← word swap, still forbidden
+#   ❌ Output: "Please wait ________ your mother comes home."  ← minor rewording, still forbidden
+ 
+# REQUIRED:
+#   ✅ Detect pattern:  TIME preposition (until / before / since / by / after)
+#   ✅ New sentence:    "The students must remain seated ________ the teacher dismisses the class."
+#   ✅ Answer:          until
+ 
+# Every single generated sentence must have a DIFFERENT:
+#   - Subject (not the same person/animal/thing from input)
+#   - Verb (not the same action from input)
+#   - Context (not the same situation from input)"""
+ 
+#     # ================================================================
+#     # SECTION 3 — QUESTION TYPE DESCRIPTIONS
+#     # ================================================================
+ 
+#     if content_type == ContentType.WORKSHEET_EXAM_PAPER:
+#         type_descriptions = {
+#             QuestionType.MCQ: (
+#                 "Blank-based MCQ — 4 options (A, B, C, D).\n"
+#                 "  For TENSE topic:       'She ________ (walk) to school when it started raining.'\n"
+#                 "  For PREPOSITION topic: 'The flight departs ________ 6 AM tomorrow.'\n"
+#                 "  For ARTICLES topic:    'She is ________ best player on the team.'\n"
+#                 "  For VOCABULARY topic:  'A ________ is a person who is new to a job or activity.'\n"
+#                 "  ❌ NEVER ask: 'What tense is used?' or 'What is the past participle of...?'"
+#             ),
+#             QuestionType.FILL_IN_THE_BLANK: (
+#                 "New blank-based sentence using the same grammar pattern.\n"
+#                 "  For TENSE topic:       verb hint MANDATORY → 'She ________ (finish) her work before noon.'\n"
+#                 "  For PREPOSITION topic: NO verb hint → 'He has been waiting ________ morning.'\n"
+#                 "  For ARTICLES topic:    NO verb hint → '________ Nile is the longest river in the world.'\n"
+#                 "  For VOCABULARY topic:  definition-based ONLY → 'A ________ is a ruler of a kingdom.'\n"
+#                 "  ❌ NEVER copy any sentence from the original text"
+#             ),
+#             QuestionType.SHORT_ANSWER: (
+#                 "Grammar transformation or usage questions ONLY.\n"
+#                 "  For TENSE topic:       'Rewrite in past perfect: She finishes her homework.'\n"
+#                 "  For PREPOSITION topic: 'Correct the preposition: He is good in mathematics.'\n"
+#                 "  For ARTICLES topic:    'Fill in the correct article: ________ sun rises in the east.'\n"
+#                 "  For VOCABULARY topic:  'Write the antonym of generous and use it in a sentence.'\n"
+#                 "  ❌ NEVER ask comprehension questions like 'Why did...?' or 'What happened...?'"
+#             ),
+#         }
+#     else:
+#         type_descriptions = {
+#             QuestionType.MCQ: (
+#                 "Comprehension MCQ — 4 options (A, B, C, D) directly based on the passage.\n"
+#                 "  Example: 'What did the writer find under his foot?'\n"
+#                 "           A) A coin  B) A note  C) A key  D) Nothing"
+#             ),
+#             QuestionType.FILL_IN_THE_BLANK: (
+#                 "Key information gap from the passage — use exactly 8 underscores.\n"
+#                 "  Example: 'The writer found a ________ coin under his foot.'\n"
+#                 "  Answer must be a word or phrase directly from the passage."
+#             ),
+#             QuestionType.SHORT_ANSWER: (
+#                 "Why / How / Describe / Explain type questions answerable in 1–2 sentences.\n"
+#                 "  Example: 'Why did the man claim he was on his knees?'\n"
+#                 "           'How did the writer feel after receiving the news?'"
+#             ),
+#         }
+ 
+#     selected_type_lines = []
+#     for qt in question_types:
+#         selected_type_lines.append(f"- {type_descriptions[qt]}")
+#     types_text = "\n".join(selected_type_lines)
+ 
+#     # ================================================================
+#     # SECTION 4 — CONTENT INSTRUCTION BLOCK
+#     # ================================================================
+ 
+#     if content_type == ContentType.WORKSHEET_EXAM_PAPER:
+#         content_instruction = """CONTENT TYPE: WORKSHEET / EXAM PAPER
+ 
+# Follow these steps strictly:
+#   STEP 1 — Read the entire text and identify the grammar topic(s):
+#             (e.g., prepositions of time/place/direction, past perfect, articles, vocabulary)
+#   STEP 2 — If multiple sub-topics exist, list all of them mentally
+#   STEP 3 — DISCARD all original sentences from the text completely
+#   STEP 4 — Generate BRAND NEW sentences using the same grammar pattern(s)
+#   STEP 5 — Distribute questions evenly if multiple sub-topics were detected
+ 
+# WORKED EXAMPLE — If worksheet tests PREPOSITION (time + place):
+#   Detected sub-topics: time prepositions, place prepositions
+#   Total questions: 6 → 3 per sub-topic
+ 
+#   Fill in the Blank (time):
+#     "She has been studying ________ early morning."
+#     Answer: since
+ 
+#   Fill in the Blank (place):
+#     "The cat was hiding ________ the sofa during the storm."
+#     Answer: under
+ 
+#   MCQ (time):
+#     "The meeting was scheduled ________ Friday afternoon."
+#     A) at  B) on  C) in  D) by
+#     Answer: B
+ 
+#   MCQ (place):
+#     "He stood ________ the window, watching the rain fall."
+#     A) between  B) beside  C) through  D) across
+#     Answer: B"""
+ 
+#     else:
+#         content_instruction = """CONTENT TYPE: READING PASSAGE
+ 
+# Generate questions that test comprehension and understanding of the passage.
+# All questions must be directly based on facts, events, and ideas written in the text.
+# Do not ask questions about information not present in the passage."""
+ 
+#     # ================================================================
+#     # SECTION 5 — QUESTION DISTRIBUTION
+#     # ================================================================
+ 
+#     questions_per_type = number_of_questions // len(question_types)
+#     remainder = number_of_questions % len(question_types)
+ 
+#     distribution_parts = []
+#     for i, qt in enumerate(question_types):
+#         count = questions_per_type + (1 if i < remainder else 0)
+#         distribution_parts.append(f"{qt.value}: {count} questions")
+#     distribution_text = ", ".join(distribution_parts)
+ 
+#     # ================================================================
+#     # SECTION 6 — FINAL RULES REMINDER
+#     # ================================================================
+ 
+#     if content_type == ContentType.WORKSHEET_EXAM_PAPER:
+#         final_rules = """Final rules before generating:
+# 1.  MCQ must always have exactly 4 options (A, B, C, D)
+# 2.  Fill in the blank must use ________ (exactly 8 underscores)
+# 3.  "options" field must be null for fill_in_the_blank and short_answer
+# 4.  "answer" field must NEVER be null or empty
+# 5.  NEVER copy, reuse, or slightly modify any sentence from the input text
+# 6.  ALL generated sentences must be 100% original with different subjects and contexts
+# 7.  Verb hint ________ (verb) is MANDATORY for tense/verb topics ONLY
+# 8.  NO verb hint for preposition, articles, parts of speech, vocabulary topics
+# 9.  For vocabulary fill-in-the-blank: use definition-based format ONLY
+# 10. Short answer must be grammar transformation or usage questions ONLY
+# 11. If multiple grammar sub-topics detected: distribute questions evenly across ALL of them
+# 12. Output must be valid JSON only — no explanation, no markdown"""
+ 
+#     else:
+#         final_rules = """Final rules before generating:
+# 1.  MCQ must always have exactly 4 options (A, B, C, D)
+# 2.  Fill in the blank must use ________ (exactly 8 underscores)
+# 3.  "options" field must be null for fill_in_the_blank and short_answer
+# 4.  "answer" field must NEVER be null or empty
+# 5.  All questions must be directly based on the passage content
+# 6.  Short answer must be answerable in 1–2 sentences
+# 7.  Answers must be accurate and taken from the passage
+# 8.  Output must be valid JSON only — no explanation, no markdown"""
+ 
+#     # ================================================================
+#     # SECTION 7 — FINAL PROMPT ASSEMBLY
+#     # ================================================================
+ 
+#     return f"""Generate exactly {number_of_questions} questions based on the text below.
+ 
+# {auto_detect_hint}
+ 
+# ---
+ 
+# {anti_copy_block}
+ 
+# ---
+ 
+# {content_instruction}
+ 
+# ---
+ 
+# Generate these question types:
+# {types_text}
+ 
+# Question distribution: {distribution_text}
+ 
+# ---
+ 
+# TEXT TO USE:
+# \"\"\"
+# {text}
+# \"\"\"
+ 
+# ---
+ 
+# Respond ONLY with this exact JSON structure — no other text, no markdown:
+# {{
+#   "questions": [
+#     {{
+#       "question_number": 1,
+#       "question_type": "mcq",
+#       "question_text": "completely new sentence based on detected grammar pattern",
+#       "options": [
+#         {{"label": "A", "text": "option 1"}},
+#         {{"label": "B", "text": "option 2"}},
+#         {{"label": "C", "text": "option 3"}},
+#         {{"label": "D", "text": "option 4"}}
+#       ],
+#       "answer": "correct option label (A / B / C / D)"
+#     }},
+#     {{
+#       "question_number": 2,
+#       "question_type": "fill_in_the_blank",
+#       "question_text": "completely new sentence with ________ blank",
+#       "options": null,
+#       "answer": "correct word or phrase"
+#     }},
+#     {{
+#       "question_number": 3,
+#       "question_type": "short_answer",
+#       "question_text": "grammar transformation or usage question",
+#       "options": null,
+#       "answer": "correct transformed sentence or usage example"
+#     }}
+#   ]
+# }}
+ 
+# {final_rules}"""
+
+
+
+
 def _build_user_prompt(
     text: str,
     question_types: List[QuestionType],
@@ -613,13 +944,11 @@ def _build_user_prompt(
     Build the user prompt for question generation.
     The prompt varies depending on content type and selected question types.
     """
- 
+
     # ================================================================
     # SECTION 1 — AUTO CONTENT TYPE DETECTION HINT
     # ================================================================
-    # Even though content_type comes from the request, we give the LLM
-    # an explicit signal to override if it detects worksheet patterns.
- 
+
     auto_detect_hint = """⚠️ CONTENT TYPE AUTO-CHECK (Do this before anything else):
 Read the input text carefully. If you find ANY of these signals:
   - Numbered sentences with blanks:  "1. She ________ to school."
@@ -627,40 +956,40 @@ Read the input text carefully. If you find ANY of these signals:
   - Exercise headers:                 "Fill in the blanks", "Exercise 1"
   - Verb hints in brackets:           ________ (go)
   - MCQ option lists already present: A) walk  B) walked
- 
+
 → OVERRIDE content type to: WORKSHEET / EXAM PAPER
 → DISCARD all existing sentences from the text
 → EXTRACT grammar pattern only
 → GENERATE completely new sentences
- 
+
 If NONE of the above signals are found → treat as READING PASSAGE."""
- 
+
     # ================================================================
     # SECTION 2 — ANTI-COPY ENFORCEMENT BLOCK
     # ================================================================
- 
+
     anti_copy_block = """🚨 ANTI-COPY RULE — ZERO TOLERANCE:
- 
+
 FORBIDDEN (even if slightly changed):
   ❌ Input:  "Wait ________ your mother reaches home."
   ❌ Output: "Wait ________ your mother reaches home."       ← exact copy
   ❌ Output: "Wait ________ your father reaches home."       ← word swap, still forbidden
   ❌ Output: "Please wait ________ your mother comes home."  ← minor rewording, still forbidden
- 
+
 REQUIRED:
   ✅ Detect pattern:  TIME preposition (until / before / since / by / after)
   ✅ New sentence:    "The students must remain seated ________ the teacher dismisses the class."
   ✅ Answer:          until
- 
+
 Every single generated sentence must have a DIFFERENT:
   - Subject (not the same person/animal/thing from input)
   - Verb (not the same action from input)
   - Context (not the same situation from input)"""
- 
+
     # ================================================================
     # SECTION 3 — QUESTION TYPE DESCRIPTIONS
     # ================================================================
- 
+
     if content_type == ContentType.WORKSHEET_EXAM_PAPER:
         type_descriptions = {
             QuestionType.MCQ: (
@@ -691,88 +1020,244 @@ Every single generated sentence must have a DIFFERENT:
     else:
         type_descriptions = {
             QuestionType.MCQ: (
-                "Comprehension MCQ — 4 options (A, B, C, D) directly based on the passage.\n"
-                "  Example: 'What did the writer find under his foot?'\n"
-                "           A) A coin  B) A note  C) A key  D) Nothing"
+                "Comprehension MCQ — 4 options (A, B, C, D) directly based on passage content.\n"
+                "\n"
+                "RULE 1 — PARAGRAPH COVERAGE (MANDATORY):\n"
+                "  Distribute questions across ALL paragraphs.\n"
+                "  Count paragraphs first: A, B, C, D, E = 5 paragraphs.\n"
+                "  Each paragraph must have at least 1 question.\n"
+                "  The FINAL paragraph (E) must have at least 1 question.\n"
+                "  VERIFY before submitting:\n"
+                "    Para A → at least 1 question ✔\n"
+                "    Para B → at least 1 question ✔\n"
+                "    Para C → at least 1 question ✔\n"
+                "    Para D → at least 1 question ✔\n"
+                "    Para E → at least 1 question ✔\n"
+                "  If any paragraph has 0 questions → replace most trivial question with one from that paragraph.\n"
+                "\n"
+                "RULE 2 — ANSWER DISTRIBUTION (MANDATORY):\n"
+                "  Correct answers MUST appear across all 4 labels.\n"
+                "  A: at least 1 correct answer\n"
+                "  B: at least 1 correct answer\n"
+                "  C: at least 1 correct answer\n"
+                "  D: at least 1 correct answer\n"
+                "  NEVER have more than 3 questions with the same answer label.\n"
+                "  COUNT your answers before submitting: A=? B=? C=? D=?\n"
+                "  If any label is missing → rewrite a question so that label becomes the answer.\n"
+                "\n"
+                "RULE 3 — FINAL PARAGRAPH QUESTION WITH ANSWER D (MANDATORY):\n"
+                "  At least one question from the final paragraph MUST have answer D.\n"
+                "  Final paragraph covers: South Tyrol Museum, isotopes, Wolfgang Müller,\n"
+                "  Valle Isarco, Val Senales, mica chips in intestines.\n"
+                "  To make answer D: put the correct fact as option D,\n"
+                "  and make A, B, C plausible but wrong.\n"
+                "  Examples:\n"
+                "    ✅ 'Where has the Iceman's body been stored since 1998?'\n"
+                "       A) University of Innsbruck\n"
+                "       B) A research lab in London\n"
+                "       C) A museum in Vienna\n"
+                "       D) South Tyrol Museum of Archaeology in Bolzano\n"
+                "       Answer: D\n"
+                "\n"
+                "    ✅ 'In which valley did scientists determine the Iceman probably grew up?'\n"
+                "       A) Val Senales\n"
+                "       B) Innsbruck Valley\n"
+                "       C) Bolzano Valley\n"
+                "       D) Valle Isarco\n"
+                "       Answer: D\n"
+                "\n"
+                "RULE 4 — QUESTION LEVEL DISTRIBUTION:\n"
+                "  Mix three levels:\n"
+                "  - Factual (40%): directly answerable from text\n"
+                "  - Inferential (35%): requires understanding\n"
+                "  - Analytical (25%): what does it suggest / why\n"
+                "\n"
+                "RULE 5 — QUESTION WORDING:\n"
+                "  Question must make sense WITHOUT the answer.\n"
+                "  ❌ WRONG: 'What did the Iceman carry that was an unfinished bow?'\n"
+                "  ✅ RIGHT:  'What material was the Iceman's unfinished bow made from?'\n"
+                "\n"
+                "RULE 6 — DISTRACTOR QUALITY:\n"
+                "  Wrong options must be plausible — not obviously wrong.\n"
+                "  ❌ 'He was buried in a golden tomb' ← obviously wrong\n"
+                "  ✅ 'He was wearing elaborate ceremonial garments' ← plausible\n"
+                "\n"
+                "FINAL SELF-CHECK before submitting MCQ questions:\n"
+                "  ✔ Have I covered ALL paragraphs including E?\n"
+                "  ✔ Do answers include A, B, C, AND D?\n"
+                "  ✔ Is there at least one question from the final paragraph with answer D?\n"
+                "  ✔ Are wrong options plausible?\n"
+                "  ✔ Does each question make sense without the answer?\n"
+                "  If any answer is NO → fix before submitting.\n"
             ),
             QuestionType.FILL_IN_THE_BLANK: (
-                "Key information gap from the passage — use exactly 8 underscores.\n"
-                "  Example: 'The writer found a ________ coin under his foot.'\n"
-                "  Answer must be a word or phrase directly from the passage."
+                "REWRITE a fact from the passage as a NEW sentence, then remove one KEY word as blank.\n"
+                "  Use exactly 8 underscores: ________\n"
+                "  NEVER copy the original sentence — ALWAYS express it differently.\n"
+                "  Cover ALL paragraphs — especially paragraph E (isotopes, Müller, Valle Isarco).\n"
+                "\n"
+                "  BANNED answers — do NOT use these trivial words as blanks:\n"
+                "    ❌ rocky, small, human, elderly, old, large, young, simple\n"
+                "    ❌ Any word that appears immediately next to the blank in the original\n"
+                "\n"
+                "  CORRECT approach:\n"
+                "    Passage says: 'birchbark container of embers wrapped in maple leaves'\n"
+                "    ✅ 'To carry fire on his journey, the Iceman stored embers in a ________ container.'\n"
+                "       Answer: birchbark\n"
+                "    ✅ 'Scientists used ________ analysis in his teeth to determine where he grew up.'\n"
+                "       Answer: isotope\n"
+                "    ✅ 'The Iceman likely spent his final years near the ________ glacier.'\n"
+                "       Answer: Val Senales\n"
+                "\n"
+                "  WRONG approach:\n"
+                "    ❌ 'The Iceman was in his mid-________.'  Answer: 40s  ← trivial copy\n"
+                "    ❌ 'oldest intact member of the ________ family'  Answer: human  ← trivial copy\n"
+                "    ❌ 'discovered in a ________ hollow'  Answer: rocky  ← trivial copy\n"
+                "\n"
+                "  SELF-CHECK before each question:\n"
+                "    'Can someone answer this without understanding the passage?' If YES → rewrite.\n"
+                "    'Is this sentence copied from the passage?' If YES → rewrite.\n"
+                "    'Is the answer a trivial adjective or obvious noun?' If YES → rewrite."
             ),
             QuestionType.SHORT_ANSWER: (
-                "Why / How / Describe / Explain type questions answerable in 1–2 sentences.\n"
-                "  Example: 'Why did the man claim he was on his knees?'\n"
-                "           'How did the writer feel after receiving the news?'"
+                "Why / How / Describe / Explain type questions — answerable in 1-2 sentences.\n"
+                "  Must test UNDERSTANDING of passage content — not just recall.\n"
+                "  Cover ALL paragraphs including the last one.\n"
+                "  Example: 'What does the presence of half-finished arrows suggest about the Iceman?'\n"
+                "           'How did scientists use isotope analysis to learn about the Iceman's life?'\n"
+                "           'Why did Klaus Oeggl compare the death site to a paleo crime scene?'"
             ),
         }
- 
+
     selected_type_lines = []
     for qt in question_types:
         selected_type_lines.append(f"- {type_descriptions[qt]}")
     types_text = "\n".join(selected_type_lines)
- 
+
     # ================================================================
     # SECTION 4 — CONTENT INSTRUCTION BLOCK
     # ================================================================
- 
+
     if content_type == ContentType.WORKSHEET_EXAM_PAPER:
-        content_instruction = """CONTENT TYPE: WORKSHEET / EXAM PAPER
- 
-Follow these steps strictly:
-  STEP 1 — Read the entire text and identify the grammar topic(s):
-            (e.g., prepositions of time/place/direction, past perfect, articles, vocabulary)
-  STEP 2 — If multiple sub-topics exist, list all of them mentally
-  STEP 3 — DISCARD all original sentences from the text completely
-  STEP 4 — Generate BRAND NEW sentences using the same grammar pattern(s)
-  STEP 5 — Distribute questions evenly if multiple sub-topics were detected
- 
-WORKED EXAMPLE — If worksheet tests PREPOSITION (time + place):
-  Detected sub-topics: time prepositions, place prepositions
-  Total questions: 6 → 3 per sub-topic
- 
-  Fill in the Blank (time):
-    "She has been studying ________ early morning."
-    Answer: since
- 
-  Fill in the Blank (place):
-    "The cat was hiding ________ the sofa during the storm."
-    Answer: under
- 
-  MCQ (time):
-    "The meeting was scheduled ________ Friday afternoon."
-    A) at  B) on  C) in  D) by
-    Answer: B
- 
-  MCQ (place):
-    "He stood ________ the window, watching the rain fall."
-    A) between  B) beside  C) through  D) across
-    Answer: B"""
- 
+      content_instruction = """CONTENT TYPE: WORKSHEET / EXAM PAPER
+
+    ===================================================================
+    MULTI-TOPIC DETECTION — MANDATORY FIRST STEP:
+    ===================================================================
+    
+    Read the ENTIRE text carefully. It may contain MULTIPLE exercise sections.
+    
+    STEP 1 — Count how many distinct exercise sections exist:
+      Look for:
+      - Section headers: "Prepositions", "Exercise 1", "II. Fill in the blanks"
+      - Different grammar topics: prepositions vs articles vs parts of speech vs tense
+    
+    STEP 2 — List ALL detected topics:
+      Example:
+      - Topic 1: Prepositions (time, place, direction, transport)
+      - Topic 2: Parts of Speech (noun, verb, adverb, pronoun, conjunction, interjection)
+      - Topic 3: Articles (a, an, the)
+    
+    STEP 3 — Calculate questions per topic:
+      Total questions ÷ Number of topics = Questions per topic
+      Example: 20 questions ÷ 3 topics = 7 + 7 + 6
+    
+    STEP 4 — Generate questions EVENLY from ALL topics:
+      NEVER generate all questions from only the first topic.
+      NEVER skip any detected topic.
+      If 3 topics detected → each topic MUST have questions.
+    
+    ===================================================================
+    CORRECT MULTI-TOPIC DISTRIBUTION EXAMPLE:
+    ===================================================================
+    
+    Input has: Prepositions + Parts of Speech + Articles
+    Total: 20 questions → Prepositions: 7, Parts of Speech: 7, Articles: 6
+    
+    Preposition (7):
+      "The scientists worked ________ the lab closed."  Answer: until
+      "She has been studying ________ morning."  Answer: since
+      "We travelled ________ train."  Answer: by
+    
+    Parts of Speech (7):
+      "The gardener waters plants in the ________."  Answer: garden
+      "The detective examined evidence ________."  Answer: carefully
+      "My sister is a teacher. ________ works at a school."  Answer: She
+    
+    Articles (6):
+      "________ Nile is the longest river."  Answer: The
+      "She needs ________ umbrella."  Answer: an
+      "She is ________ university student."  Answer: a
+    
+    ===================================================================
+    PER-TOPIC GENERATION RULES:
+    ===================================================================
+    
+    PREPOSITIONS: No verb hint. Cover time, place, direction, transport sub-types.
+    
+    PARTS OF SPEECH:
+      NOUN:        Answer = person/place/thing (NEVER an article or preposition)
+      ADVERB:      Answer modifies a verb (carefully, bravely, quietly)
+      PRONOUN:     Answer = pronoun word, NEVER a proper name
+      CONJUNCTION: Sub-type MUST match original (reason/time/contrast)
+      VERB:        Answer = action word
+      INTERJECTION: Exclamatory word at start of sentence
+    
+    ARTICLES:
+      Cover all rules: "the" for unique nouns, "an" for vowel sounds,
+      "a" for consonant sounds (including "university" → "a university")
+      Include tricky cases like silent h ("an honest man")
+    
+    FINAL VERIFICATION:
+      ✔ Questions from ALL detected topics?
+      ✔ Even distribution across topics?
+      ✔ All sentences 100% original — not copied from input?
+      ✔ Each answer is the correct grammar element?
+      If any NO → fix before submitting."""
+
     else:
         content_instruction = """CONTENT TYPE: READING PASSAGE
- 
-Generate questions that test comprehension and understanding of the passage.
-All questions must be directly based on facts, events, and ideas written in the text.
-Do not ask questions about information not present in the passage."""
- 
+
+    Generate questions that test comprehension and understanding of the passage.
+    All questions must be directly based on facts, events, and ideas written in the text.
+    
+    MANDATORY RULES FOR READING PASSAGE:
+    
+    1. PARAGRAPH COVERAGE:
+       - Count the paragraphs (A, B, C, D, E...)
+       - Generate at least 1 question from EACH paragraph
+       - The LAST paragraph is the most important — give it extra attention
+       - NEVER skip any paragraph
+    
+    2. FILL IN THE BLANK — REWRITE RULE:
+       - NEVER copy a sentence from the passage
+       - ALWAYS rewrite the fact in a different sentence structure
+       - Remove one KEY word as the blank
+       - Banned answers: rocky, small, human, elderly (trivial words)
+    
+    3. MCQ ANSWER DISTRIBUTION:
+       - Spread correct answers across A, B, C, D
+       - At least one question must have answer A
+       - At least one question must have answer D
+       - NEVER have all answers as B"""
+
     # ================================================================
     # SECTION 5 — QUESTION DISTRIBUTION
     # ================================================================
- 
+
     questions_per_type = number_of_questions // len(question_types)
     remainder = number_of_questions % len(question_types)
- 
+
     distribution_parts = []
     for i, qt in enumerate(question_types):
         count = questions_per_type + (1 if i < remainder else 0)
         distribution_parts.append(f"{qt.value}: {count} questions")
     distribution_text = ", ".join(distribution_parts)
- 
+
     # ================================================================
     # SECTION 6 — FINAL RULES REMINDER
     # ================================================================
- 
+
     if content_type == ContentType.WORKSHEET_EXAM_PAPER:
         final_rules = """Final rules before generating:
 1.  MCQ must always have exactly 4 options (A, B, C, D)
@@ -787,7 +1272,7 @@ Do not ask questions about information not present in the passage."""
 10. Short answer must be grammar transformation or usage questions ONLY
 11. If multiple grammar sub-topics detected: distribute questions evenly across ALL of them
 12. Output must be valid JSON only — no explanation, no markdown"""
- 
+
     else:
         final_rules = """Final rules before generating:
 1.  MCQ must always have exactly 4 options (A, B, C, D)
@@ -795,49 +1280,52 @@ Do not ask questions about information not present in the passage."""
 3.  "options" field must be null for fill_in_the_blank and short_answer
 4.  "answer" field must NEVER be null or empty
 5.  All questions must be directly based on the passage content
-6.  Short answer must be answerable in 1–2 sentences
-7.  Answers must be accurate and taken from the passage
-8.  Output must be valid JSON only — no explanation, no markdown"""
- 
+6.  Fill in the blank: REWRITE the sentence — NEVER copy from passage
+7.  Fill in the blank: banned trivial answers: rocky, small, human, elderly
+8.  MCQ: spread answers across A, B, C, D — at least one A and one D
+9.  Cover ALL paragraphs — especially the final paragraph
+10. Short answer must be answerable in 1-2 sentences
+11. Output must be valid JSON only — no explanation, no markdown"""
+
     # ================================================================
     # SECTION 7 — FINAL PROMPT ASSEMBLY
     # ================================================================
- 
+
     return f"""Generate exactly {number_of_questions} questions based on the text below.
- 
+
 {auto_detect_hint}
- 
+
 ---
- 
+
 {anti_copy_block}
- 
+
 ---
- 
+
 {content_instruction}
- 
+
 ---
- 
+
 Generate these question types:
 {types_text}
- 
+
 Question distribution: {distribution_text}
- 
+
 ---
- 
+
 TEXT TO USE:
 \"\"\"
 {text}
 \"\"\"
- 
+
 ---
- 
+
 Respond ONLY with this exact JSON structure — no other text, no markdown:
 {{
   "questions": [
     {{
       "question_number": 1,
       "question_type": "mcq",
-      "question_text": "completely new sentence based on detected grammar pattern",
+      "question_text": "comprehension question based on passage",
       "options": [
         {{"label": "A", "text": "option 1"}},
         {{"label": "B", "text": "option 2"}},
@@ -849,21 +1337,23 @@ Respond ONLY with this exact JSON structure — no other text, no markdown:
     {{
       "question_number": 2,
       "question_type": "fill_in_the_blank",
-      "question_text": "completely new sentence with ________ blank",
+      "question_text": "REWRITTEN sentence from passage with ________ blank",
       "options": null,
-      "answer": "correct word or phrase"
+      "answer": "correct key word from passage"
     }},
     {{
       "question_number": 3,
       "question_type": "short_answer",
-      "question_text": "grammar transformation or usage question",
+      "question_text": "Why/How/Describe/Explain question about passage content",
       "options": null,
-      "answer": "correct transformed sentence or usage example"
+      "answer": "correct answer in 1-2 sentences"
     }}
   ]
 }}
- 
+
 {final_rules}"""
+
+
 
 
 
