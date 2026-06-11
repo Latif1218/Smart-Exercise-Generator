@@ -6,14 +6,7 @@ from app.config import settings
 from app.models.response_models import ExtractedPage, OCRResponse
 
 
-class OpenAIOCRService:
-    # def __init__(self):
-    #     self.api_key = getattr(settings, 'openai_api_key', None)
-    #     if not self.api_key:
-    #         raise ValueError("OPENAI_API_KEY is not set in .env file!")
-
-    #     self.client = OpenAI(api_key=self.api_key)
-    #     self.model = "gpt-4o"         
+class OpenAIOCRService:     
 
     def __init__(self):
         self.api_key = getattr(settings, 'azure_openai_api_key', None)
