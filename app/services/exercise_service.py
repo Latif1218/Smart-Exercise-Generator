@@ -351,7 +351,6 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
     5. Validates Paragraph E coverage for reading passages
     """
 
-    # ---- Step 1: Auto-detect content type ----
     detected_type = _detect_content_type(request.extracted_text)
 
     if detected_type != request.content_type:
@@ -361,7 +360,6 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
         )
         request.content_type = detected_type
 
-    # ---- Step 2: Use full text (no chunking for section detection) ----
     text_chunks = split_text_into_chunks(request.extracted_text, max_chars=3000)
 
     if len(text_chunks) > 1:
@@ -370,12 +368,9 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
             f"Using FULL text for section detection."
         )
 
-    # Always use full text so all sections are detected
-    # Each section will be sent to LLM separately anyway
     text_to_use = request.extracted_text
     
 
-    # ---- Step 2b: Split into sections if multiple topics detected ----
     sections = _split_text_by_sections(text_to_use)
     print(f"SECTIONS DETECTED: {len(sections)}")
     for s in sections:
@@ -389,7 +384,6 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
     else:
         logger.info("[Sections] Single section detected.")
 
-    # ---- Step 3: Calculate per-type targets ----
     requested_types = request.question_types
     num_types = len(requested_types)
     questions_per_type = request.number_of_questions // num_types
@@ -405,7 +399,6 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
         f"total={request.number_of_questions}"
     )
 
-    # ---- Step 4: Call LLM with retry logic ----
     MAX_RETRIES = 2
     all_questions: List[Question] = []
 
@@ -484,10 +477,8 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
 
             attempt_questions.extend(all_type_questions[:target_count])
 
-        # ---- Step 5: Validate MCQ answer distribution ----
         answer_dist_ok = _validate_mcq_answer_distribution(attempt_questions)
 
-        # ---- Step 5b: Validate MCQ answer balance (no label > 3 times) ----
         mcq_answers = [
             q.answer.upper() for q in attempt_questions
             if q.question_type == QuestionType.MCQ
@@ -502,7 +493,6 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
                 f"{'Retrying...' if attempt < MAX_RETRIES else 'Max retries reached.'}"
             )
 
-        # ---- Step 5c: Validate Paragraph E coverage ----
         para_e_ok = _enforce_paragraph_e_coverage(attempt_questions, text_to_use)
         if not para_e_ok:
             logger.warning(
@@ -510,7 +500,6 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
                 f"{'Retrying...' if attempt < MAX_RETRIES else 'Max retries reached.'}"
             )
 
-        # ---- Step 6: Check if we have enough of each type ----
         type_counts = Counter(q.question_type for q in attempt_questions)
         enough = all(
             type_counts.get(qt, 0) >= type_targets[qt]
@@ -549,19 +538,16 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
                     f"Returning {len(all_questions)} questions."
                 )
 
-    # ---- Step 7: Validate at least one question exists ----
     if not all_questions:
         raise ValueError(
             f"No questions could be generated. "
             f"Requested: {[t.value for t in requested_types]}. "
             f"Please try again."
         )
-
-    # ---- Step 8: Re-number questions sequentially ----
+    
     for idx, question in enumerate(all_questions, 1):
         question.question_number = idx
 
-    # ---- Step 9: Build breakdown summary ----
     breakdown = _calculate_question_breakdown(all_questions)
 
     logger.info(
