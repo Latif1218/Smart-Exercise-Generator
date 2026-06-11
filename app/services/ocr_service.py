@@ -1,6 +1,4 @@
 import pytesseract
-from PIL import Image
-import io
 from typing import List
 from app.config import settings
 from app.utils.image_utils import preprocess_image_for_ocr, validate_image, numpy_to_pil
