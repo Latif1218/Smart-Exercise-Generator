@@ -91,5 +91,4 @@ Return ONLY the extracted and formatted plain text. No explanations or extra com
             raise Exception(f"OpenAI Vision OCR failed: {str(e)}")
 
 
-# Global instance
 openai_ocr_service = OpenAIOCRService()
