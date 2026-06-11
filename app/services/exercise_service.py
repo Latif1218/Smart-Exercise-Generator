@@ -321,11 +321,9 @@ def _enforce_paragraph_e_coverage(
     text_lower = text.lower()
     text_has_para_e = any(kw in text_lower for kw in para_e_keywords)
 
-    # If text doesn't have Paragraph E content — no need to check
     if not text_has_para_e:
         return True
 
-    # Check if any question covers Paragraph E
     for q in questions:
         q_text = q.question_text.lower()
         q_answer = q.answer.lower()
