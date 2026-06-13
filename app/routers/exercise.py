@@ -1,7 +1,4 @@
-# Smart-Exercise-Generator\app\routers\exercise.py
-
 from fastapi import APIRouter, HTTPException, status
-
 from app.models.request_models import GenerateExerciseRequest
 from app.models.response_models import GenerateExerciseResponse
 from app.services.exercise_service import generate_exercises
