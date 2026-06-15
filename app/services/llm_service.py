@@ -195,6 +195,16 @@ STEP 3A — BLACKLIST all content from the original text:
   - All key objects:   specific items mentioned (vase, car, book, etc.)
   - All situations:    the scenario or setting (family argument, classroom, etc.)
   - All verbs used:    the specific action words in original sentences
+  - All SENTENCE STRUCTURES used in original sentences:
+    Detect and blacklist every grammatical pattern, for example:
+    - [Place] is ________ [superlative] [noun]
+    - [Person] bought ________ [noun] and ________ [noun]
+    - [Ordinal] month of the year
+    
+    SELF-CHECK before each new sentence:
+      "Does this sentence follow the same pattern as any original sentence?"
+      If YES → rewrite with a completely different structure.
+      If NO → proceed.
 
   EXAMPLE:
   Original: "Jack: I'm sorry for ________ your vase, Dad."
@@ -637,6 +647,26 @@ STEP 5 — STRICT OUTPUT RULES
     - NEVER mix question types unless ALL requested types were listed
     - This is the most critical rule — violating it is a severe error
 15. Respond with valid JSON ONLY — no explanation, no markdown, no extra text
+16. ANSWER VALIDATION — UNIVERSAL RULE:
+    Before writing any answer, look at the question sentence.
+    Identify ALL the possible correct answers for that blank.
+    The "answer" field must ONLY contain a word that:
+      ✅ Grammatically fits the blank
+      ✅ Makes the sentence meaningful and correct
+      ✅ Belongs to the grammar topic being tested
+
+    SELF-CHECK before writing answer:
+      "If a student fills this blank with my answer,
+       is the sentence grammatically correct?" 
+      If NO → rewrite the answer.
+      If YES → proceed.
+
+    STRICTLY FORBIDDEN:
+      ❌ Answer that does not fit the blank grammatically
+      ❌ Answer that belongs to a different grammar topic
+      ❌ Answer that is null or empty
+      ❌ Answer that is a full sentence
+      ❌ Answer that contains extra explanation
 
 ===================================================================
 FINAL CHECKLIST — VERIFY BEFORE GENERATING

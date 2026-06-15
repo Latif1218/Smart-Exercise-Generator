@@ -300,6 +300,12 @@ def _validate_mcq_answer_distribution(questions: List[Question]) -> bool:
     return True
 
 
+
+
+
+
+
+
 # ================================================================
 # HELPER 6 — PARAGRAPH E COVERAGE VALIDATION
 # ================================================================
