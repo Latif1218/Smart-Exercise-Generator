@@ -304,10 +304,171 @@ def _validate_mcq_answer_distribution(questions: List[Question]) -> bool:
 
 
 
+# ================================================================
+# HELPER 6 — STRUCTURE EXTRACTOR
+# ================================================================
 
+def _extract_sentence_structures(text: str) -> List[str]:
+    structures = []
+    normalized = re.sub(r'_{4,}', 'BLANK', text)
+    normalized = re.sub(r'\(\d+\)', 'BLANK', normalized)
+    lines = normalized.split('\n')
+
+    for line in lines:
+        line = line.strip()
+        line = re.sub(r'^\([ivxlcdmIVXLCDM]+\)\s*', '', line)
+        
+        if 'BLANK' not in line:
+            continue
+
+        skeleton = line.lower()
+        skeleton = re.sub(r'\b\d+\w*\b', 'NUM', skeleton)
+        skeleton = re.sub(r'\s+', ' ', skeleton).strip()
+        structures.append(skeleton)
+
+        # ✅ Debug log — কোন pattern detect হচ্ছে দেখো
+        print(f"[DEBUG] skeleton: {skeleton}")
+
+        if re.search(r'(bought|purchased|got|prepared|made).+blank.+and.+blank', skeleton):
+            structures.append("PATTERN:double_blank")
+            print("[DEBUG] → PATTERN:double_blank detected")
+
+        if re.search(r'^what\s+blank', skeleton):
+            structures.append("PATTERN:what_exclamatory")
+            print("[DEBUG] → PATTERN:what_exclamatory detected")
+
+        if re.search(r'blank\s+\w*(est|most\s+\w+)', skeleton):
+            structures.append("PATTERN:superlative")
+            print("[DEBUG] → PATTERN:superlative detected")
+
+        if re.search(r'is\s+blank\s+\w+\s+\w+\s+of\s+the', skeleton):
+            structures.append("PATTERN:ordinal_time")
+            print("[DEBUG] → PATTERN:ordinal_time detected")
+
+        if re.search(r'in\s+blank\s+(morning|afternoon|evening|night)', skeleton):
+            structures.append("PATTERN:time_of_day")
+            print("[DEBUG] → PATTERN:time_of_day detected")
+
+    print(f"[DEBUG] Total structures: {structures}")
+    logger.info(f"[StructureExtract] {len(structures)} structures blacklisted")
+    return structures
 
 # ================================================================
-# HELPER 6 — PARAGRAPH E COVERAGE VALIDATION
+# HELPER 7 — STRUCTURE SIMILARITY VALIDATOR  
+# ================================================================
+
+def _validate_structure_similarity(
+    questions: List[Question],
+    original_structures: List[str]
+) -> List[int]:
+    failed_indices = []
+    seen_texts = set()
+    seen_skeletons = set()
+
+    pattern_list = [s for s in original_structures if s.startswith("PATTERN:")]
+    print(f"[DEBUG] Active patterns: {pattern_list}")
+
+    for idx, question in enumerate(questions):
+        q_text = question.question_text
+
+        # Normalize
+        normalized_q = re.sub(r'_{4,}', 'BLANK', q_text)
+        normalized_q = re.sub(r'\(\d+\)', 'BLANK', normalized_q)
+        normalized_q = re.sub(r'\b\d+\w*\b', 'NUM', normalized_q)
+        normalized_q = re.sub(r'\s+', ' ', normalized_q).strip().lower()
+
+        print(f"[DEBUG] Q{idx+1} normalized: {normalized_q}")
+
+        failed = False
+
+        # ================================================================
+        # CHECK 1 — Duplicate sentence
+        # ================================================================
+        if normalized_q in seen_texts:
+            print(f"[DEBUG] Q{idx+1} → FAILED: duplicate sentence")
+            failed_indices.append(idx)
+            continue
+        seen_texts.add(normalized_q)
+
+        # ================================================================
+        # CHECK 2 — Double blank (universal)
+        # ================================================================
+        if normalized_q.count('blank') >= 2:
+            print(f"[DEBUG] Q{idx+1} → FAILED: double blank")
+            failed_indices.append(idx)
+            continue
+
+        # ================================================================
+        # CHECK 3 — Same structure as previous generated questions
+        # ================================================================
+        skeleton_q = re.sub(r'\b[a-z]{4,}\b', 'W', normalized_q)
+        skeleton_q = re.sub(r'\s+', ' ', skeleton_q).strip()
+
+        if skeleton_q in seen_skeletons:
+            print(f"[DEBUG] Q{idx+1} → FAILED: same structure as previous question")
+            failed_indices.append(idx)
+            continue
+        seen_skeletons.add(skeleton_q)
+
+        # ================================================================
+        # CHECK 4 — Original structure similarity
+        # ================================================================
+        for structure in original_structures:
+            if structure.startswith("PATTERN:"):
+                pattern_name = structure.replace("PATTERN:", "")
+
+                if pattern_name == "double_blank":
+                    if normalized_q.count('blank') >= 2:
+                        print(f"[DEBUG] Q{idx+1} → FAILED: double_blank pattern")
+                        failed = True
+                        break
+
+                elif pattern_name == "what_exclamatory":
+                    if re.search(r'^what\s+blank', normalized_q, re.IGNORECASE):
+                        print(f"[DEBUG] Q{idx+1} → FAILED: what_exclamatory")
+                        failed = True
+                        break
+
+                elif pattern_name == "superlative":
+                    if re.search(r'blank\s+\w*(est|most\s+\w+)', normalized_q, re.IGNORECASE):
+                        print(f"[DEBUG] Q{idx+1} → FAILED: superlative")
+                        failed = True
+                        break
+
+                elif pattern_name == "ordinal_time":
+                    if re.search(r'is\s+blank\s+\w+\s+\w+\s+of\s+the', normalized_q, re.IGNORECASE):
+                        print(f"[DEBUG] Q{idx+1} → FAILED: ordinal_time")
+                        failed = True
+                        break
+
+                elif pattern_name == "time_of_day":
+                    if re.search(r'in\s+blank\s+(morning|afternoon|evening|night)', normalized_q, re.IGNORECASE):
+                        print(f"[DEBUG] Q{idx+1} → FAILED: time_of_day")
+                        failed = True
+                        break
+
+                continue
+
+            # Word similarity check
+            q_words = set(normalized_q.split())
+            s_words = set(structure.split())
+            if not s_words:
+                continue
+            common = q_words & s_words
+            similarity = len(common) / len(s_words)
+            if similarity > 0.6:
+                print(f"[DEBUG] Q{idx+1} → FAILED: {similarity:.0%} word similarity")
+                failed = True
+                break
+
+        if failed:
+            failed_indices.append(idx)
+
+    print(f"[DEBUG] Failed indices: {failed_indices}")
+    return failed_indices
+
+# ================================================================
+# HELPER 8 — PARAGRAPH E COVERAGE VALIDATION
 # ================================================================
 
 def _enforce_paragraph_e_coverage(
@@ -355,6 +516,7 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
     3. Calls LLM separately for EACH section when multiple topics detected
     4. Validates MCQ answer distribution and balance
     5. Validates Paragraph E coverage for reading passages
+    6. Validates structure similarity to prevent duplication
     """
 
     detected_type = _detect_content_type(request.extracted_text)
@@ -375,7 +537,6 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
         )
 
     text_to_use = request.extracted_text
-    
 
     sections = _split_text_by_sections(text_to_use)
     print(f"SECTIONS DETECTED: {len(sections)}")
@@ -405,12 +566,15 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
         f"total={request.number_of_questions}"
     )
 
-    MAX_RETRIES = 2
+    # Structure blacklist — একবারই extract করো, loop এর বাইরে
+    original_structures = _extract_sentence_structures(text_to_use)
+
+    MAX_RETRIES = 3
     all_questions: List[Question] = []
 
     for attempt in range(1, MAX_RETRIES + 1):
         logger.info(f"[LLM] Attempt {attempt}/{MAX_RETRIES}")
-        attempt_questions: List[Question] = []
+        attempt_questions: List[Question] = list(all_questions)
 
         for qt in requested_types:
             target_count = type_targets[qt]
@@ -483,6 +647,47 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
 
             attempt_questions.extend(all_type_questions[:target_count])
 
+        # ============================================================
+        # VALIDATION 1 — STRUCTURE SIMILARITY CHECK
+        # ============================================================
+        failed_structure_indices = _validate_structure_similarity(
+            attempt_questions,
+            original_structures
+        )
+
+        if failed_structure_indices:
+            logger.warning(
+                f"[StructureCheck] {len(failed_structure_indices)} questions "
+                f"failed structure check: indices {failed_structure_indices}. "
+                f"{'Retrying...' if attempt < MAX_RETRIES else 'Max retries reached.'}"
+            )
+            structure_ok = False
+        else:
+            structure_ok = True
+            logger.info("[StructureCheck] All questions passed structure check ✅")
+
+        # ============================================================
+        # VALIDATION 2 — MCQ ANSWER DISTRIBUTION
+        # ============================================================
+
+
+        if failed_structure_indices and attempt < MAX_RETRIES:
+            passed_questions = [
+                q for i, q in enumerate(attempt_questions)
+                if i not in failed_structure_indices
+            ]
+            logger.info(
+                f"[StructureCheck] Keeping {len(passed_questions)} passed questions, "
+                f"regenerating {len(failed_structure_indices)} failed ones."
+            )
+            for qt in requested_types:
+                passed_count = sum(1 for q in passed_questions if q.question_type == qt)
+                type_targets[qt] = max(0, type_targets[qt] - passed_count)
+
+            all_questions = passed_questions
+            continue
+
+
         answer_dist_ok = _validate_mcq_answer_distribution(attempt_questions)
 
         mcq_answers = [
@@ -499,6 +704,9 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
                 f"{'Retrying...' if attempt < MAX_RETRIES else 'Max retries reached.'}"
             )
 
+        # ============================================================
+        # VALIDATION 3 — PARAGRAPH E COVERAGE
+        # ============================================================
         para_e_ok = _enforce_paragraph_e_coverage(attempt_questions, text_to_use)
         if not para_e_ok:
             logger.warning(
@@ -506,13 +714,19 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
                 f"{'Retrying...' if attempt < MAX_RETRIES else 'Max retries reached.'}"
             )
 
+        # ============================================================
+        # VALIDATION 4 — ENOUGH QUESTIONS GENERATED
+        # ============================================================
         type_counts = Counter(q.question_type for q in attempt_questions)
         enough = all(
             type_counts.get(qt, 0) >= type_targets[qt]
             for qt in requested_types
         )
 
-        if enough and answer_dist_ok and answer_balanced and para_e_ok:
+        # ============================================================
+        # ALL VALIDATIONS PASS → DONE
+        # ============================================================
+        if enough and answer_dist_ok and answer_balanced and para_e_ok and structure_ok:
             all_questions = attempt_questions
             logger.info(
                 f"[LLM] Attempt {attempt} succeeded: "
@@ -520,6 +734,10 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
                 f"Breakdown: {Counter(q.question_type.value for q in all_questions)}"
             )
             break
+
+        # ============================================================
+        # SOME VALIDATION FAILED → LOG & RETRY
+        # ============================================================
         else:
             if not enough:
                 missing = {
@@ -528,12 +746,19 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
                     if type_counts.get(qt, 0) < type_targets[qt]
                 }
                 logger.warning(
-                    f"[LLM] Attempt {attempt}: Missing: {missing}. "
+                    f"[LLM] Attempt {attempt}: Missing questions: {missing}. "
                     f"{'Retrying...' if attempt < MAX_RETRIES else 'Done.'}"
                 )
+
             if not answer_dist_ok:
                 logger.warning(
                     f"[LLM] Attempt {attempt}: MCQ missing labels. "
+                    f"{'Retrying...' if attempt < MAX_RETRIES else 'Done.'}"
+                )
+
+            if not structure_ok:
+                logger.warning(
+                    f"[LLM] Attempt {attempt}: Structure similarity failed. "
                     f"{'Retrying...' if attempt < MAX_RETRIES else 'Done.'}"
                 )
 
@@ -550,7 +775,7 @@ async def generate_exercises(request: GenerateExerciseRequest) -> GenerateExerci
             f"Requested: {[t.value for t in requested_types]}. "
             f"Please try again."
         )
-    
+
     for idx, question in enumerate(all_questions, 1):
         question.question_number = idx
 

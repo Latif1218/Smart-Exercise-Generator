@@ -196,14 +196,37 @@ STEP 3A — BLACKLIST all content from the original text:
   - All situations:    the scenario or setting (family argument, classroom, etc.)
   - All verbs used:    the specific action words in original sentences
   - All SENTENCE STRUCTURES used in original sentences:
-    Detect and blacklist every grammatical pattern, for example:
-    - [Place] is ________ [superlative] [noun]
-    - [Person] bought ________ [noun] and ________ [noun]
-    - [Ordinal] month of the year
+    Detect and blacklist every grammatical pattern found in the original.
     
+    FORBIDDEN PATTERNS — do not use ANY of these sentence structures
+    that appear in the original text:
+
+    1. Double-blank buying pattern — STRICTLY FORBIDDEN:
+       Any sentence where someone buys, gets, or receives 
+       TWO items with TWO separate blanks:
+       ❌ "She bought __ orange and __ apple"
+       ❌ "He purchased __ pen and __ notebook"  
+       ❌ "They received __ gift and __ card"
+       ✅ Instead use: single blank sentences only
+
+    2. "What BLANK [adjective] [noun] [subject] [verb]!"
+       ❌ "What __ beautiful painting you have created!"
+
+    3. "[Subject] is BLANK [superlative] [noun] in [place]"
+       ❌ "Maria is __ most talented dancer in the troupe"
+
+    4. "[Month/Day] is BLANK [ordinal] [noun] of the [period]"
+       ❌ "July is __ seventh month of the year"
+
+    5. "[Subject] arrived/started/reached in BLANK [time of day]"
+       ❌ "They arrived late in __ evening"
+
+    6. "[Place] is BLANK [adjective] [noun]"
+       ❌ "Amazon is __ longest river in the world"
+
     SELF-CHECK before each new sentence:
-      "Does this sentence follow the same pattern as any original sentence?"
-      If YES → rewrite with a completely different structure.
+      "Does this sentence follow any of the above patterns?"
+      If YES → completely rewrite with a different structure.
       If NO → proceed.
 
   EXAMPLE:
