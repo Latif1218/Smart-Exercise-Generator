@@ -72,4 +72,4 @@ class ErrorResponse(BaseModel):
 class HelpContactResponse(BaseModel):
     success: bool
     message: str
-    data: Optional[dict] = None
+    data: Optional[dict] = None 
